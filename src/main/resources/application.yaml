@@ -1,0 +1,38 @@
+spring:
+  application:
+    name: lineiphone-easyinstallments
+
+
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/lineiphoneeasyinstallments}
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD:root}
+    driver-class-name: org.postgresql.Driver
+
+
+  jpa:
+    hibernate:
+
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+
+
+  ai:
+    openai:
+      api-key: ${OPENAI_API_KEY}
+      chat:
+        options:
+          model: gpt-4o-mini
+          temperature: 0.1
+
+
+line:
+  bot:
+    channel-token: ${LINE_CHANNEL_TOKEN}
+    channel-secret: ${LINE_CHANNEL_SECRET}
+    handler:
+      path: /callback
