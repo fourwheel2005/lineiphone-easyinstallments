@@ -5,9 +5,14 @@ import com.example.lineiphone_easyinstallments.entity.UserState;
 import com.example.lineiphone_easyinstallments.repository.UserStateRepository;
 import com.example.lineiphone_easyinstallments.service.ai.AiDataExtractorService;
 import com.linecorp.bot.messaging.client.MessagingApiClient;
+import com.linecorp.bot.messaging.model.Message;
+import com.linecorp.bot.messaging.model.PushMessageRequest;
+import com.linecorp.bot.messaging.model.TextMessage;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+
+import java.util.List;
 
 @Slf4j
 @Service
@@ -21,8 +26,7 @@ public class SavingsFlowService implements ServiceFlowHandler {
     private final AiDataExtractorService aiDataExtractorService;
     private final MessagingApiClient messagingApiClient;
 
-    // 🌟 อย่าลืมใส่ ID กลุ่มแอดมินสำหรับ "ทีมออมดาวน์" แยกต่างหาก (ถ้ายิงเข้ากลุ่มเดียวกันก็ใช้ ID เดิมครับ)
-    private final String ADMIN_GROUP_ID = "C_YOUR_SAVINGS_ADMIN_GROUP_ID_HERE";
+    private final String ADMIN_GROUP_ID = "C7c79cdda1b97da92c07a5c45bda0ab0f";
 
     @Override
     public boolean supports(String serviceName) {
@@ -103,7 +107,6 @@ public class SavingsFlowService implements ServiceFlowHandler {
                 userState.setCurrentState("ADMIN_MODE");
                 userStateRepository.save(userState);
 
-                // 🌟 ดึงชื่อ LINE จริงของลูกค้า
                 String customerName = "ลูกค้า (ไม่ทราบชื่อ)";
                 try {
                     var profile = messagingApiClient.getProfile(userId).get();
@@ -112,13 +115,27 @@ public class SavingsFlowService implements ServiceFlowHandler {
                     log.warn("❌ ไม่สามารถดึงชื่อโปรไฟล์ของ userId: {} ได้", userId);
                 }
 
-                lineMessageService.sendAdminApprovalCard(
-                        ADMIN_GROUP_ID,
-                        "ออมดาวน์",
-                        "savings",
-                        customerName,
-                        userId,
-                        "ยอดเปิดบิล: " + msg + " (" + (userState.getDeviceModel() != null ? userState.getDeviceModel() : "") + ")"
+                String finalAdminCardText =
+                        "━━━━━━━━━━━━━━━━━━━━\n" +
+                                "📋 แจ้งเตือน: ลูกค้ารอเปิดบิลออมดาวน์\n" +
+                                "━━━━━━━━━━━━━━━━━━━━\n" +
+                                "👤 ชื่อ LINE : " + customerName + "\n" +
+                                "🪪 รหัส     : " + userId + "\n" +
+                                "📱 รุ่นที่สนใจ: " + (userState.getDeviceModel() != null ? userState.getDeviceModel() : "-") + "\n" +
+                                "💸 ยอดเปิดบิล: " + msg + " บาท\n" +
+                                "━━━━━━━━━━━━━━━━━━━━\n" +
+                                "👆 กรุณาติดต่อลูกค้ากลับด้วยครับ";
+
+                List<Message> pushMessages = List.of(new TextMessage(finalAdminCardText));
+
+                messagingApiClient.pushMessage(
+                        null,
+                        new PushMessageRequest(
+                                ADMIN_GROUP_ID,
+                                pushMessages,
+                                false,
+                                (List<String>) null
+                        )
                 );
 
                 return "รับทราบครับ ยอดเปิดบิลแรก " + msg + " 💸\n\n" +
