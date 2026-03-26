@@ -26,8 +26,14 @@ public class UserState {
     @Column(name = "current_state", nullable = false)
     private String currentState;
 
+    @Column(name = "previous_state")
+    private String previousState;
+
     @Column(name = "last_updated")
     private LocalDateTime lastUpdated;
+
+    @Column(name = "device_model")
+    private String deviceModel;
 
     @PrePersist
     @PreUpdate

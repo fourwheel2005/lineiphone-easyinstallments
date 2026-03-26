@@ -27,7 +27,7 @@ spring:
       chat:
         options:
           model: gpt-4o-mini
-          temperature: 0.1
+          temperature: 0.0
 
 
 line:

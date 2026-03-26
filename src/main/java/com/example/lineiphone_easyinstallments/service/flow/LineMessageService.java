@@ -2,6 +2,7 @@ package com.example.lineiphone_easyinstallments.service.flow;
 
 
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.linecorp.bot.messaging.client.MessagingApiClient;
 import com.linecorp.bot.messaging.model.FlexContainer;
 import com.linecorp.bot.messaging.model.FlexMessage;
@@ -13,7 +14,6 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StreamUtils;
-import tools.jackson.databind.ObjectMapper;
 
 import java.nio.charset.StandardCharsets;
 import java.util.List;
@@ -39,16 +39,12 @@ public class LineMessageService {
     @Value("classpath:flex/emergency_card.json")
     private Resource emergencyCardTemplate;
 
-    // 🌟 ตัวแปรเก็บ String ของ JSON ไว้ใน Memory (ช่วยให้ระบบทำงานเร็วขึ้น 10 เท่า)
     private String adminCardJsonCache;
     private String creditCardJsonCache;
     private String documentCardJsonCache;
     private String emergencyCardJsonCache;
 
-    /**
-     * 🌟 ทำงานอัตโนมัติ 1 ครั้งตอน Start Server
-     * โหลดไฟล์ JSON ทั้งหมดมาเก็บไว้ใน RAM เพื่อไม่ให้คอขวดเวลาใช้งานจริง
-     */
+
     @PostConstruct
     public void initTemplates() {
         try {
@@ -62,9 +58,7 @@ public class LineMessageService {
         }
     }
 
-    // =========================================================
-    // Public Methods สำหรับให้ Flow Service ต่างๆ เรียกใช้งาน
-    // =========================================================
+
 
     public void sendAdminApprovalCard(String adminGroupId, String serviceNameTh, String serviceNameEn,
                                       String customerName, String userId, String deviceModel) {
@@ -116,9 +110,7 @@ public class LineMessageService {
         }
     }
 
-    /**
-     * แปลง String ให้เป็น Flex Message และยิงออกไป
-     */
+
     private void executePushMessage(String adminGroupId, String altText, String jsonPayload) throws Exception {
         FlexContainer flexContainer = objectMapper.readValue(jsonPayload, FlexContainer.class);
         FlexMessage flexMessage = new FlexMessage(altText, flexContainer);

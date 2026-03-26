@@ -1,20 +1,31 @@
 package com.example.lineiphone_easyinstallments.service.flow;
 
-
+import com.example.lineiphone_easyinstallments.dto.ExtractedData;
 import com.example.lineiphone_easyinstallments.entity.UserState;
 import com.example.lineiphone_easyinstallments.repository.UserStateRepository;
+import com.example.lineiphone_easyinstallments.service.ai.AiDataExtractorService;
+import com.linecorp.bot.messaging.client.MessagingApiClient;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class SavingsFlowService implements ServiceFlowHandler {
 
     private final UserStateRepository userStateRepository;
+    private final LineMessageService lineMessageService;
+
+    // 🌟 1. เพิ่ม 2 ตัวนี้เข้ามาเพื่อความฉลาด!
+    private final AiDataExtractorService aiDataExtractorService;
+    private final MessagingApiClient messagingApiClient;
+
+    // 🌟 อย่าลืมใส่ ID กลุ่มแอดมินสำหรับ "ทีมออมดาวน์" แยกต่างหาก (ถ้ายิงเข้ากลุ่มเดียวกันก็ใช้ ID เดิมครับ)
+    private final String ADMIN_GROUP_ID = "C_YOUR_SAVINGS_ADMIN_GROUP_ID_HERE";
 
     @Override
     public boolean supports(String serviceName) {
-        // แผนกนี้รับผิดชอบเฉพาะคนที่พิมพ์หรือเลือก "ออมดาวน์" เท่านั้น
         return "ออมดาวน์".equals(serviceName);
     }
 
@@ -25,40 +36,101 @@ public class SavingsFlowService implements ServiceFlowHandler {
 
     @Override
     public String processMessage(UserState userState, String userMessage) {
+        String state = userState.getCurrentState() != null ? userState.getCurrentState() : "STEP_1_WELCOME";
+        String msg = userMessage.trim();
+        String userId = userState.getLineUserId();
 
-        // ถ้าเป็นการเรียกครั้งแรกจาก ChatFlowManager (ส่งข้อความว่างๆ มากระตุ้น)
-        // หรือ State เป็น STEP_1 ให้เริ่มถามคำถามแรก
-        String state = userState.getCurrentState() != null ? userState.getCurrentState() : "STEP_1_SELECT_MODEL";
+        if (msg.contains("แอดมิน") || msg.contains("คุยกับคน") || msg.contains("คืนเงิน")) {
+            userState.setPreviousState(state);
+            userState.setCurrentState("ADMIN_MODE");
+            userStateRepository.save(userState);
+
+            lineMessageService.sendEmergencyCard(ADMIN_GROUP_ID, "ออมดาวน์", userId, "ลูกค้าเรียกแอดมิน/สอบถามเรื่องคืนเงิน");
+            return "รับทราบครับ รบกวนรอแอดมินเข้ามาดูแลและให้คำปรึกษาสักครู่นะครับ ⏳";
+        }
 
         switch (state) {
-            case "STEP_1_SELECT_MODEL":
-                // เลื่อน State ไปรอคำตอบใน Step ถัดไป
-                userState.setCurrentState("STEP_2_SAVINGS_PLAN");
-                userStateRepository.save(userState);
-                return "[ออมดาวน์ - Step 1] ยินดีต้อนรับสู่บริการออมดาวน์ครับ 💰\n" +
-                        "ลูกค้าสนใจออมดาวน์เป็น iPhone รุ่นไหน และความจุกี่ GB ดีครับ?";
 
-            case "STEP_2_SAVINGS_PLAN":
-                userState.setCurrentState("STEP_3_OPEN_ACCOUNT");
+            case "STEP_1_WELCOME":
+                userState.setCurrentState("STEP_2_CHECK_TARGET");
                 userStateRepository.save(userState);
-                return "[ออมดาวน์ - Step 2] รุ่นนี้สวยมากครับ!\n" +
-                        "ลูกค้าสะดวกส่งออมรายวัน รายสัปดาห์ หรือรายเดือนดีครับ? และสะดวกส่งงวดละประมาณเท่าไหร่ครับ?";
+                return "ยินดีต้อนรับสู่บริการออมดาวน์ / ออมของ ครับ 💰✨\n\n" +
+                        "📌 **กติกาเบื้องต้น:**\n" +
+                        "- ออมขั้นต่ำเท่าไหร่ก็ได้ เวลาไหนก็ได้ตามสะดวก\n" +
+                        "- ไม่สามารถรับเงินคืนได้ทุกกรณี แต่สามารถเปลี่ยนเป็นสินค้าอื่นแทนได้ครับ\n\n" +
+                        "👉 1. ลูกค้าสนใจออมเป็น iPhone รุ่นไหน (13-17) หรืออุปกรณ์เสริมอะไรครับ?\n" +
+                        "👉 2. ปัจจุบันลูกค้าอายุเท่าไหร่ครับ? (รับอายุ 18-60 ปี)";
 
-            case "STEP_3_OPEN_ACCOUNT":
-                // สมมติว่ารอโอนเงินเปิดบิล
-                userState.setCurrentState("STEP_4_WAITING_SLIP");
+
+            case "STEP_2_CHECK_TARGET":
+                log.info("🤖 ส่งข้อความให้ AI วิเคราะห์ (ออมดาวน์): {}", msg);
+                ExtractedData extractedData = aiDataExtractorService.extractInfo(msg);
+
+                int extractedAge = extractedData.age() != null ? extractedData.age() : 0;
+                String extractedModel = extractedData.deviceModel();
+
+                if (extractedAge == 0 || extractedModel == null || "unknown".equalsIgnoreCase(extractedModel)) {
+                    return "แอดมินรบกวนขอทราบ 'รุ่นที่สนใจ' และ 'อายุ' อีกครั้งให้ชัดเจนได้ไหมครับ เช่น อายุ 22 สนใจ 15 Pro Max ครับ 🙏";
+                }
+
+                if (extractedAge < 18 || extractedAge > 60) {
+                    userState.setCurrentState("REJECTED");
+                    userStateRepository.save(userState);
+                    return "ต้องขออภัยด้วยนะครับ 🙏 ทางร้านขอสงวนสิทธิ์ให้บริการออมดาวน์และออมของ เฉพาะลูกค้าที่มีอายุระหว่าง 18 - 60 ปีเท่านั้นครับผม ขอบคุณที่สนใจสอบถามนะครับ";
+                }
+
+                userState.setDeviceModel(extractedModel);
+                userState.setCurrentState("STEP_3_OPEN_BILL");
                 userStateRepository.save(userState);
-                return "[ออมดาวน์ - Step 3] รับทราบเงื่อนไขครับ ✅\n" +
-                        "เพื่อเป็นการเปิดบัญชีออมดาวน์ รบกวนลูกค้าโอนยอดเปิดบิลแรก และส่งสลิปมาที่ช่องแชทนี้ได้เลยนะครับ";
 
-            case "STEP_4_WAITING_SLIP":
-                return "[ออมดาวน์ - Step 4] (ระบบกำลังรอตรวจสอบสลิป... หากส่งแล้วรอแอดมินสักครู่นะครับ)";
+                return "รับทราบครับ สนใจออมเป็นรุ่น **" + extractedModel + "** นะครับ 📝\n\n" +
+                        "สำหรับระยะเวลาการออม จะขึ้นอยู่กับยอดดาวน์ที่ลูกค้าตั้งเป้าไว้นะครับ:\n" +
+                        "🔹 ยอดดาวน์ไม่เกิน 10,000 บาท = ระยะออมสูงสุด 3 เดือน\n" +
+                        "🔹 ยอดดาวน์ 10,000 - 15,000 บาท = ระยะออมสูงสุด 6 เดือน\n" +
+                        "🔹 ยอดดาวน์ 15,000 บาทขึ้นไป = ระยะออมสูงสุด 1 ปี\n\n" +
+                        "👉 ลูกค้าตั้งเป้ายอดดาวน์ไว้ที่ประมาณกี่บาทครับ?";
+
+
+            case "STEP_3_OPEN_BILL":
+                userState.setCurrentState("STEP_4_HANDOFF");
+                userStateRepository.save(userState);
+                return "โอเคครับ ระยะเวลาการออมอยู่ในเกณฑ์ที่กำหนดครับ ✅\n\n" +
+                        "เพื่อเป็นการเปิดบัญชีออมดาวน์ในระบบ...\n" +
+                        "👉 วันนี้ลูกค้าสะดวก **โอนยอดเปิดบิลแรก** ที่จำนวนเงินเท่าไหร่ดีครับ? (เริ่มต้นกี่บาทก็ได้ครับ)";
+
+
+            case "STEP_4_HANDOFF":
+                userState.setCurrentState("ADMIN_MODE");
+                userStateRepository.save(userState);
+
+                // 🌟 ดึงชื่อ LINE จริงของลูกค้า
+                String customerName = "ลูกค้า (ไม่ทราบชื่อ)";
+                try {
+                    var profile = messagingApiClient.getProfile(userId).get();
+                    customerName = profile.body().displayName();
+                } catch (Exception e) {
+                    log.warn("❌ ไม่สามารถดึงชื่อโปรไฟล์ของ userId: {} ได้", userId);
+                }
+
+                lineMessageService.sendAdminApprovalCard(
+                        ADMIN_GROUP_ID,
+                        "ออมดาวน์",
+                        "savings",
+                        customerName,
+                        userId,
+                        "ยอดเปิดบิล: " + msg + " (" + (userState.getDeviceModel() != null ? userState.getDeviceModel() : "") + ")"
+                );
+
+                return "รับทราบครับ ยอดเปิดบิลแรก " + msg + " 💸\n\n" +
+                        "เดี๋ยวแอดมินตัวจริงจะเข้ามาสรุปเงื่อนไข ส่งเลขบัญชี และทำตารางออมให้นะครับ รบกวนรอแอดมินสักครู่ครับ ⏳";
+
+            case "ADMIN_MODE":
+                return null; // บอทเงียบกริบ
 
             default:
-                // เซฟตี้: ถ้า State ผิดเพี้ยน ให้กลับไปเริ่ม Step 1 ของออมดาวน์ใหม่
-                userState.setCurrentState("STEP_1_SELECT_MODEL");
+                userState.setCurrentState("STEP_1_WELCOME");
                 userStateRepository.save(userState);
-                return "เข้าสู่ระบบออมดาวน์อีกครั้ง ลูกค้าต้องการเริ่มต้นทำรายการใหม่ไหมครับ? (พิมพ์รุ่นที่อยากออมได้เลย)";
+                return "ระบบเริ่มการทำรายการออมดาวน์ใหม่ครับ รบกวนแจ้งรุ่นที่สนใจ และอายุของลูกค้าครับ";
         }
     }
 }

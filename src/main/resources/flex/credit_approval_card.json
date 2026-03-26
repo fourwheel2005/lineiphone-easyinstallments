@@ -7,13 +7,13 @@
     "contents": [
       {
         "type": "text",
-        "text": "🔴 คิวใหม่: รอตรวจสภาพเครื่อง",
+        "text": "🟡 คิวใหม่: รอเช็คเครดิต",
         "weight": "bold",
         "color": "#FFFFFF",
         "size": "md"
       }
     ],
-    "backgroundColor": "#FF4B4B",
+    "backgroundColor": "#FF9900",
     "paddingAll": "12px"
   },
   "body": {
@@ -47,29 +47,6 @@
               },
               {
                 "type": "text",
-                "text": "{{CUSTOMER_NAME}}",
-                "wrap": true,
-                "color": "#666666",
-                "size": "sm",
-                "flex": 3,
-                "weight": "bold"
-              }
-            ]
-          },
-          {
-            "type": "box",
-            "layout": "baseline",
-            "spacing": "sm",
-            "contents": [
-              {
-                "type": "text",
-                "text": "รหัส",
-                "color": "#aaaaaa",
-                "size": "sm",
-                "flex": 1
-              },
-              {
-                "type": "text",
                 "text": "{{USER_ID}}",
                 "wrap": true,
                 "color": "#666666",
@@ -86,14 +63,14 @@
             "contents": [
               {
                 "type": "text",
-                "text": "รุ่น",
+                "text": "ข้อมูล",
                 "color": "#aaaaaa",
                 "size": "sm",
                 "flex": 1
               },
               {
                 "type": "text",
-                "text": "{{DEVICE_MODEL}}",
+                "text": "{{EXTRA_INFO}}",
                 "wrap": true,
                 "color": "#666666",
                 "size": "sm",
@@ -117,9 +94,9 @@
         "height": "sm",
         "action": {
           "type": "postback",
-          "label": "✅ สภาพผ่าน",
-          "data": "action=approve&service={{SERVICE_EN}}&userId={{USER_ID}}",
-          "displayText": "แอดมินกด: สภาพผ่าน"
+          "label": "✅ เครดิตผ่าน",
+          "data": "action=approve_credit&service={{SERVICE_EN}}&userId={{USER_ID}}",
+          "displayText": "แอดมินกด: เครดิตผ่าน"
         },
         "color": "#00B900"
       },
@@ -129,9 +106,9 @@
         "height": "sm",
         "action": {
           "type": "postback",
-          "label": "❌ ไม่ผ่าน",
-          "data": "action=reject&service={{SERVICE_EN}}&userId={{USER_ID}}",
-          "displayText": "แอดมินกด: ไม่ผ่าน"
+          "label": "❌ ติดแบล็คลิสต์",
+          "data": "action=reject_credit&service={{SERVICE_EN}}&userId={{USER_ID}}",
+          "displayText": "แอดมินกด: ติดแบล็คลิสต์"
         },
         "color": "#F0F0F0"
       }

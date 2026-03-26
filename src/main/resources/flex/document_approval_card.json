@@ -7,13 +7,13 @@
     "contents": [
       {
         "type": "text",
-        "text": "🔴 คิวใหม่: รอตรวจสภาพเครื่อง",
+        "text": "🔵 คิวใหม่: รอตรวจเอกสาร",
         "weight": "bold",
         "color": "#FFFFFF",
         "size": "md"
       }
     ],
-    "backgroundColor": "#FF4B4B",
+    "backgroundColor": "#007BFF",
     "paddingAll": "12px"
   },
   "body": {
@@ -47,29 +47,6 @@
               },
               {
                 "type": "text",
-                "text": "{{CUSTOMER_NAME}}",
-                "wrap": true,
-                "color": "#666666",
-                "size": "sm",
-                "flex": 3,
-                "weight": "bold"
-              }
-            ]
-          },
-          {
-            "type": "box",
-            "layout": "baseline",
-            "spacing": "sm",
-            "contents": [
-              {
-                "type": "text",
-                "text": "รหัส",
-                "color": "#aaaaaa",
-                "size": "sm",
-                "flex": 1
-              },
-              {
-                "type": "text",
                 "text": "{{USER_ID}}",
                 "wrap": true,
                 "color": "#666666",
@@ -86,14 +63,14 @@
             "contents": [
               {
                 "type": "text",
-                "text": "รุ่น",
+                "text": "สถานะ",
                 "color": "#aaaaaa",
                 "size": "sm",
                 "flex": 1
               },
               {
                 "type": "text",
-                "text": "{{DEVICE_MODEL}}",
+                "text": "{{EXTRA_INFO}}",
                 "wrap": true,
                 "color": "#666666",
                 "size": "sm",
@@ -117,9 +94,9 @@
         "height": "sm",
         "action": {
           "type": "postback",
-          "label": "✅ สภาพผ่าน",
-          "data": "action=approve&service={{SERVICE_EN}}&userId={{USER_ID}}",
-          "displayText": "แอดมินกด: สภาพผ่าน"
+          "label": "✅ เอกสารครบ",
+          "data": "action=approve_doc&service={{SERVICE_EN}}&userId={{USER_ID}}",
+          "displayText": "แอดมินกด: เอกสารครบถ้วน"
         },
         "color": "#00B900"
       },
@@ -129,9 +106,9 @@
         "height": "sm",
         "action": {
           "type": "postback",
-          "label": "❌ ไม่ผ่าน",
-          "data": "action=reject&service={{SERVICE_EN}}&userId={{USER_ID}}",
-          "displayText": "แอดมินกด: ไม่ผ่าน"
+          "label": "❌ ขอเพิ่ม",
+          "data": "action=request_more_doc&service={{SERVICE_EN}}&userId={{USER_ID}}",
+          "displayText": "แอดมินกด: ขอเอกสารเพิ่ม"
         },
         "color": "#F0F0F0"
       }
