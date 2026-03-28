@@ -7,7 +7,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 public class LineiphoneEasyinstallmentsApplication {
 
 	public static void main(String[] args) {
-		System.out.println("Test run pass!!");
+		System.out.println("Test run pass!!???");
 		SpringApplication.run(LineiphoneEasyinstallmentsApplication.class, args);
 	}
 
