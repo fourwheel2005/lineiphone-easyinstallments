@@ -35,6 +35,12 @@ public class UserState {
     @Column(name = "device_model")
     private String deviceModel;
 
+    @Column(name = "capacity")
+    private String capacity;
+
+    @Column(name = "device_condition")
+    private String condition;
+
     @PrePersist
     @PreUpdate
     public void updateTimestamp() {

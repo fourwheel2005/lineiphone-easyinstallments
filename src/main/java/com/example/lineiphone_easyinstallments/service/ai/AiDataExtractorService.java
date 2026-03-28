@@ -16,7 +16,6 @@ public class AiDataExtractorService {
     @Value("classpath:prompt/extractor-prompt.st")
     private Resource extractorPromptTemplate;
 
-    // 🌟 สร้าง ChatClient แบบคลีนๆ ไม่ต้องใส่ Option ตรงนี้ให้เกิด Error
     public AiDataExtractorService(ChatClient.Builder chatClientBuilder) {
         this.chatClient = chatClientBuilder.build();
     }
@@ -29,18 +28,23 @@ public class AiDataExtractorService {
                     .system(sys -> sys.text(extractorPromptTemplate))
                     .user(u -> u.text(userMessage))
                     .call()
-                    .entity(ExtractedData.class); // บังคับคาย JSON กลับมาเป็น Class
+                    .entity(ExtractedData.class);
 
-            log.info("✅ AI สกัดข้อมูลสำเร็จ: Age={}, Model={}", result.age(), result.deviceModel());
+            // 🌟 อัปเดต Log ให้โชว์ข้อมูลครบถ้วน
+            log.info("✅ AI สกัดข้อมูลสำเร็จ: Age={}, Model={}, Capacity={}, Condition={}",
+                    result.age(), result.deviceModel(), result.capacity(), result.condition());
 
+            // 🌟 ดักจับ Null และใส่ค่า Default เป็น "unknown" ถ้าลูกค้าไม่ได้พิมพ์บอกมา
             return new ExtractedData(
                     result.age() != null ? result.age() : 0,
-                    result.deviceModel() != null ? result.deviceModel() : "unknown"
+                    result.deviceModel() != null && !result.deviceModel().isEmpty() ? result.deviceModel() : "unknown",
+                    result.capacity() != null && !result.capacity().isEmpty() ? result.capacity() : "unknown",
+                    result.condition() != null && !result.condition().isEmpty() ? result.condition() : "unknown"
             );
 
         } catch (Exception e) {
             log.error("❌ AI Extractor ทำงานล้มเหลว: ", e);
-            return new ExtractedData(0, "unknown");
+            return new ExtractedData(0, "unknown", "unknown", "unknown");
         }
     }
 }
