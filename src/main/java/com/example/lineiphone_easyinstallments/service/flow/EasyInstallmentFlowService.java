@@ -49,15 +49,14 @@ public class EasyInstallmentFlowService implements ServiceFlowHandler {
             userState.setPreviousState(state);
             userState.setCurrentState("ADMIN_MODE");
             userStateRepository.save(userState);
-            lineMessageService.sendEmergencyCard(ADMIN_GROUP_ID, "ไอโฟนผ่อนง่าย", userId, "ลูกค้าเรียกแอดมิน");
+
+            // ✅ ดึงชื่อลูกค้าเฉพาะตอนจะส่งการ์ด
+            lineMessageService.sendEmergencyCard(ADMIN_GROUP_ID, "ไอโฟนผ่อนง่าย", getCustomerName(userId), "ลูกค้าเรียกแอดมิน");
             return "รับทราบครับ รบกวนรอแอดมินเข้ามาดูแลสักครู่นะครับ ⏳";
         }
 
         switch (state) {
 
-            // ==========================================
-            // Step 1: ทักทายและขอข้อมูลให้ครบ
-            // ==========================================
             case "STEP_1_SELECT_MODEL":
                 userState.setCurrentState("STEP_2_CHECK_PRICE_AND_QUALIFICATION");
                 userStateRepository.save(userState);
@@ -68,11 +67,7 @@ public class EasyInstallmentFlowService implements ServiceFlowHandler {
                         "👉 3. รับเป็น **มือ 1 หรือ มือ 2** ดีครับ?\n" +
                         "(พิมพ์ตอบรวมกันได้เลยครับ เช่น 15 promax 256 มือ 1)";
 
-            // ==========================================
-            // Step 2: AI อ่านข้อมูล -> ค้นหา DB -> เสนอราคา
-            // ==========================================
             case "STEP_2_CHECK_PRICE_AND_QUALIFICATION":
-
                 log.info("🤖 ส่งข้อความให้ AI วิเคราะห์ (ผ่อนง่าย): {}", msg);
                 ExtractedData extracted = aiDataExtractorService.extractInfo(msg);
 
@@ -80,24 +75,22 @@ public class EasyInstallmentFlowService implements ServiceFlowHandler {
                 String capacity = extracted.capacity();
                 String condition = extracted.condition();
 
-                // 🛑 Fallback 1: AI หาข้อมูลไม่ครบ 3 อย่าง
                 if ("unknown".equalsIgnoreCase(model) || "unknown".equalsIgnoreCase(capacity) || "unknown".equalsIgnoreCase(condition)) {
                     return "แอดมินรบกวนขอข้อมูลเพิ่มเติมอีกนิดนะครับ 🙏 \n" +
                             "ช่วยระบุให้ครบทั้ง **'รุ่น', 'ความจุ' และ 'มือ 1/มือ 2'** ให้แอดมินหน่อยนะครับ (เช่น 15 Pro Max 256GB มือ 1) 📱";
                 }
 
-                // 🔍 ค้นหาราคาใน Database
                 Optional<PromotionPrice> priceOpt = promotionPriceRepository.findByModelAndCapacityAndCondition(model, capacity, condition);
 
-                // 🛑 Fallback 2: หาราคาใน DB ไม่เจอ (อาจจะเป็นรุ่นแปลกๆ หรือของหมด)
                 if (priceOpt.isEmpty()) {
                     userState.setCurrentState("ADMIN_MODE");
                     userStateRepository.save(userState);
-                    lineMessageService.sendEmergencyCard(ADMIN_GROUP_ID, "ไอโฟนผ่อนง่าย", userId, "ค้นหาราคาไม่เจอ: " + model + " " + capacity + " (" + condition + ")");
+
+                    // ✅ ดึงชื่อลูกค้าเฉพาะตอนจะส่งการ์ด
+                    lineMessageService.sendEmergencyCard(ADMIN_GROUP_ID, "ไอโฟนผ่อนง่าย", getCustomerName(userId), "ค้นหาราคาไม่เจอ: " + model + " " + capacity + " (" + condition + ")");
                     return "สำหรับรุ่น **" + model + " " + capacity + " (" + condition + ")** ตอนนี้โปรโมชั่นอาจมีการเปลี่ยนแปลง หรือสินค้าอาจหมดชั่วคราว \n\nเดี๋ยวแอดมินตัวจริงรีบเช็คสต๊อกและราคาพิเศษให้นะครับ รบกวนรอสักครู่ครับ ⏳";
                 }
 
-                // ✅ ค้นหาเจอ -> บันทึกข้อมูลลง UserState แล้วเสนอราคา
                 PromotionPrice price = priceOpt.get();
                 userState.setDeviceModel(model);
                 userState.setCapacity(capacity);
@@ -105,17 +98,11 @@ public class EasyInstallmentFlowService implements ServiceFlowHandler {
                 userState.setCurrentState("STEP_3_REQUEST_DOCS");
                 userStateRepository.save(userState);
 
-                // ดึง Helper Method มาประกอบร่างข้อความราคา
-                String priceDetails = buildPriceMessage(price);
-
                 return "เช็คราคาให้แล้วครับ! 🎉 สำหรับ **iPhone " + model + " " + capacity + " (" + condition + ")**\n\n" +
-                        priceDetails + "\n\n" +
+                        buildPriceMessage(price) + "\n\n" +
                         "🎁 **แถมฟรี:** ฟิล์มกันรอย, เคส, ฟิล์มกระจกเลนส์กล้อง\n\n" +
                         "👉 เพื่อพิจารณายอดผ่อน รบกวนขอทราบ **อายุ** และ **อาชีพปัจจุบัน** ของลูกค้าหน่อยนะครับ 💼";
 
-            // ==========================================
-            // Step 3: ขอเอกสาร
-            // ==========================================
             case "STEP_3_REQUEST_DOCS":
                 userState.setCurrentState("STEP_4_WAITING_APPROVAL");
                 userStateRepository.save(userState);
@@ -123,29 +110,18 @@ public class EasyInstallmentFlowService implements ServiceFlowHandler {
                         "การผ่อนกับร้านเรา **ไม่เช็คบูโร** ขอแค่อายุ 18-55 ปี และมีรายได้ครับ\n\n" +
                         "📸 รบกวนลูกค้าถ่ายรูป **หน้าบัตรประชาชน** และพิมพ์ **ชื่อ-นามสกุล** ส่งมาในแชทนี้ได้เลยครับ แอดมินจะรีบทำเรื่องอนุมัติให้ทันทีครับ";
 
-            // ==========================================
-            // Step 4: แจ้งแอดมินเข้ามารับเคส
-            // ==========================================
             case "STEP_4_WAITING_APPROVAL":
                 userState.setCurrentState("ADMIN_MODE");
                 userStateRepository.save(userState);
 
-                // 🌟 ดึงชื่อจริงลูกค้า
-                String customerName = "ลูกค้า (ไม่ทราบชื่อ)";
-                try {
-                    var profile = messagingApiClient.getProfile(userId).get();
-                    customerName = profile.body().displayName();
-                } catch (Exception e) {
-                    log.warn("❌ ไม่สามารถดึงชื่อโปรไฟล์ของ userId: {} ได้", userId);
-                }
-
                 String fullDeviceName = userState.getDeviceModel() + " " + userState.getCapacity() + " (" + userState.getCondition() + ")";
 
+                // ✅ ดึงชื่อลูกค้าเฉพาะตอนจะส่งการ์ด
                 lineMessageService.sendAdminApprovalCard(
                         ADMIN_GROUP_ID,
                         "ไอโฟนผ่อนง่าย",
-                        "easy_installment_doc", // Action สำหรับให้แอดมินกดตรวจเอกสาร
-                        customerName,
+                        "easy_installment_doc",
+                        getCustomerName(userId), // เรียกใช้ Helper Method
                         userId,
                         "รุ่น: " + fullDeviceName
                 );
@@ -164,28 +140,32 @@ public class EasyInstallmentFlowService implements ServiceFlowHandler {
     }
 
     /**
-     * Helper Method: ใช้สำหรับสร้างข้อความราคาโปรโมชั่น โดยกรองเฉพาะเดือนที่มีใน Database (ค่าไม่เป็น null)
+     * Helper Method: ฟังก์ชันช่วยดึงชื่อ Display Name ของลูกค้าจาก LINE API
+     */
+    private String getCustomerName(String userId) {
+        try {
+            var profile = messagingApiClient.getProfile(userId).get();
+            return profile.body().displayName();
+        } catch (Exception e) {
+            log.warn("❌ ไม่สามารถดึงชื่อโปรไฟล์ของ userId: {} ได้", userId);
+            return "ลูกค้า (ไม่ทราบชื่อ)";
+        }
+    }
+
+    /**
+     * Helper Method: สร้างข้อความราคา
      */
     private String buildPriceMessage(PromotionPrice price) {
         StringBuilder sb = new StringBuilder();
         sb.append("💸 **เงินดาวน์เริ่มต้น:** ").append(String.format("%,d", price.getDownPayment())).append(" บาท\n");
         sb.append("📌 **ยอดส่งรายเดือน:**\n");
 
-        if (price.getMonth10() != null) {
-            sb.append("- 10 เดือน: งวดละ ").append(String.format("%,d", price.getMonth10())).append(" บาท\n");
-        }
-        if (price.getMonth12() != null) {
-            sb.append("- 12 เดือน: งวดละ ").append(String.format("%,d", price.getMonth12())).append(" บาท\n");
-        }
-        if (price.getMonth15() != null) {
-            sb.append("- 15 เดือน: งวดละ ").append(String.format("%,d", price.getMonth15())).append(" บาท\n");
-        }
-        if (price.getMonth18() != null) {
-            sb.append("- 18 เดือน: งวดละ ").append(String.format("%,d", price.getMonth18())).append(" บาท\n");
-        }
-        if (price.getMonth24() != null) {
-            sb.append("- 24 เดือน: งวดละ ").append(String.format("%,d", price.getMonth24())).append(" บาท\n");
-        }
+        if (price.getMonth10() != null) sb.append("- 10 เดือน: งวดละ ").append(String.format("%,d", price.getMonth10())).append(" บาท\n");
+        if (price.getMonth12() != null) sb.append("- 12 เดือน: งวดละ ").append(String.format("%,d", price.getMonth12())).append(" บาท\n");
+        if (price.getMonth15() != null) sb.append("- 15 เดือน: งวดละ ").append(String.format("%,d", price.getMonth15())).append(" บาท\n");
+        if (price.getMonth18() != null) sb.append("- 18 เดือน: งวดละ ").append(String.format("%,d", price.getMonth18())).append(" บาท\n");
+        if (price.getMonth24() != null) sb.append("- 24 เดือน: งวดละ ").append(String.format("%,d", price.getMonth24())).append(" บาท\n");
+
         return sb.toString();
     }
 }

@@ -9,7 +9,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
-
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -40,12 +39,14 @@ public class BalloonFlowService implements ServiceFlowHandler {
         String msg = userMessage.trim();
         String userId = userState.getLineUserId();
 
-        // 🚨 ทางออกฉุกเฉิน
+        // 🚨 ทางออกฉุกเฉิน: ลูกค้าพิมพ์เรียกแอดมิน
         if (msg.contains("แอดมิน") || msg.contains("คุยกับคน")) {
             userState.setPreviousState(state); // จำ State เก่าไว้เผื่อคืนร่าง
             userState.setCurrentState("ADMIN_MODE");
             userStateRepository.save(userState);
-            lineMessageService.sendEmergencyCard(ADMIN_GROUP_ID, "ผ่อนบอลลูน", userId, "ลูกค้าเรียกแอดมิน");
+
+            // ✅ เปลี่ยนมาใช้ Helper Method ดึงชื่อลูกค้า
+            lineMessageService.sendEmergencyCard(ADMIN_GROUP_ID, "ผ่อนบอลลูน", getCustomerName(userId), "ลูกค้าเรียกแอดมิน");
             return "รับทราบครับ รบกวนรอแอดมินเข้ามาดูแลสักครู่นะครับ ⏳";
         }
 
@@ -60,10 +61,8 @@ public class BalloonFlowService implements ServiceFlowHandler {
                         "👉 3. ลูกค้าอายุเท่าไหร่ครับ?";
 
             case "STEP_2_CONDITION":
-
                 log.info("🤖 ส่งข้อความให้ AI วิเคราะห์: {}", msg);
                 ExtractedData extractedData = aiDataExtractorService.extractInfo(msg);
-
                 String extractedModel = extractedData.deviceModel();
 
                 if (extractedModel == null || extractedModel.trim().isEmpty() || "unknown".equalsIgnoreCase(extractedModel)) {
@@ -93,33 +92,20 @@ public class BalloonFlowService implements ServiceFlowHandler {
                         "📸 1. ถ่ายรูปรอบเครื่อง และแคปหน้า 'ตั้งค่า > ทั่วไป > เกี่ยวกับ'\n" +
                         "✍️ 2. พิมพ์ **ชื่อ-นามสกุล** ส่งมาให้แอดมินได้เลยครับ";
 
-
             case "STEP_4_WAITING_ADMIN_REVIEW":
-                // 🌟 1. ดึงชื่อ LINE ของลูกค้าจริงๆ มาก่อน
-                String customerName = "ลูกค้า (ไม่ทราบชื่อ)";
-                try {
-                    var profile = messagingApiClient.getProfile(userId).get();
-                    customerName = profile.body().displayName();
-                } catch (Exception e) {
-                    log.warn("❌ ไม่สามารถดึงชื่อโปรไฟล์ของ userId: {} ได้", userId);
-                }
-
-                // 🌟 2. ส่งการ์ดแจ้งเตือนพร้อมชื่อจริง และดึงชื่อรุ่นที่ลูกค้าเลือกไว้มาโชว์ด้วย
-                lineMessageService.sendAdminApprovalCard(
-                        ADMIN_GROUP_ID,
-                        "ผ่อนบอลลูน",
-                        "balloon",       // 🌟 ตัวที่หายไป! (ชื่อบริการภาษาอังกฤษ สำหรับเป็นข้อมูลให้ปุ่มกด)
-                        customerName,    // ✅ ตัวแปรชื่อลูกค้า
-                        userId,
-                        userState.getDeviceModel() != null ? userState.getDeviceModel() : "รอประเมิน"
-                );
-
-                // 🌟 3. สำคัญมาก! เปลี่ยน State เป็น ADMIN_MODE เพื่อให้บอทหยุดพูด รอแอดมินกดอนุมัติ
                 userState.setCurrentState("ADMIN_MODE");
                 userStateRepository.save(userState);
 
-                return "รับข้อมูลเรียบร้อยครับ 📸 แอดมินกำลังตรวจสอบสภาพเครื่องและประวัติเครดิต รบกวนรอสักครู่นะครับ ⏳";
+                lineMessageService.sendAdminApprovalCard(
+                        ADMIN_GROUP_ID,
+                        "ผ่อนบอลลูน",
+                        "balloon",
+                        getCustomerName(userId),
+                        userId,
+                        userState.getDeviceModel() != null ? "รุ่น: " + userState.getDeviceModel() : "รอประเมิน"
+                );
 
+                return "รับข้อมูลเรียบร้อยครับ 📸 แอดมินกำลังตรวจสอบสภาพเครื่องและประวัติเครดิต รบกวนรอสักครู่นะครับ ⏳";
 
             case "STEP_5_PRICING":
                 userState.setCurrentState("STEP_6_MONTH_SELECTION");
@@ -143,7 +129,6 @@ public class BalloonFlowService implements ServiceFlowHandler {
                         "- ส่ง 12 เดือน: งวดละ " + String.format("%,d", price.m12()) + " บาท\n\n" +
                         "👉 ลูกค้าสนใจรับเป็นระยะเวลา 6, 8, 10 หรือ 12 เดือนดีครับ?";
 
-
             case "STEP_6_MONTH_SELECTION":
                 if (!msg.contains("6") && !msg.contains("8") && !msg.contains("10") && !msg.contains("12")) {
                     return "ลูกค้ารับเป็นระยะเวลา 6, 8, 10 หรือ 12 เดือนดีครับ? พิมพ์ตัวเลขบอกแอดมินได้เลยครับ";
@@ -152,8 +137,9 @@ public class BalloonFlowService implements ServiceFlowHandler {
                 userState.setCurrentState("ADMIN_MODE");
                 userStateRepository.save(userState);
 
+                // ✅ เปลี่ยนมาใช้ Helper Method ดึงชื่อลูกค้า
                 lineMessageService.sendEmergencyCard(
-                        ADMIN_GROUP_ID, "ผ่อนบอลลูน", userId, "ลูกค้าเลือกเดือนแล้ว รอสรุปยอดโอนและเอกสาร"
+                        ADMIN_GROUP_ID, "ผ่อนบอลลูน", getCustomerName(userId), "ลูกค้าเลือกเดือนแล้ว รอสรุปยอดโอนและเอกสาร"
                 );
 
                 return "รับทราบครับ! แอดมินได้รับข้อมูลแล้ว 📝\nเดี๋ยวแอดมินตัวจริงจะเข้ามาสรุปยอด แจ้งเงื่อนไข และขอเอกสารทำสัญญาให้นะครับ รบกวนรอสักครู่ครับ ⏳";
@@ -165,6 +151,19 @@ public class BalloonFlowService implements ServiceFlowHandler {
                 userState.setCurrentState("STEP_1_INFO");
                 userStateRepository.save(userState);
                 return "ระบบเริ่มการทำรายการใหม่ครับ กรุณาแจ้งรุ่นไอโฟน ความจุ จังหวัด และอายุครับ";
+        }
+    }
+
+    /**
+     * Helper Method: ฟังก์ชันช่วยดึงชื่อ Display Name ของลูกค้าจาก LINE API
+     */
+    private String getCustomerName(String userId) {
+        try {
+            var profile = messagingApiClient.getProfile(userId).get();
+            return profile.body().displayName();
+        } catch (Exception e) {
+            log.warn("❌ ไม่สามารถดึงชื่อโปรไฟล์ของ userId: {} ได้", userId);
+            return "ลูกค้า (ไม่ทราบชื่อ)";
         }
     }
 
