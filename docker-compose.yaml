@@ -3,7 +3,7 @@ version: '3.8'
 services:
   app:
     build: .
-    container_name: linechatbot-app
+    container_name: lineiphoneeasyinstallments
     ports:
       - "8080:8080"
     environment:
@@ -28,7 +28,7 @@ services:
 
   db:
     image: postgres:16-alpine
-    container_name: linechatbot-db
+    container_name: lineiphoneeasyinstallments-db
     environment:
       - POSTGRES_DB=${POSTGRES_DB}
       - POSTGRES_USER=${POSTGRES_USER}
