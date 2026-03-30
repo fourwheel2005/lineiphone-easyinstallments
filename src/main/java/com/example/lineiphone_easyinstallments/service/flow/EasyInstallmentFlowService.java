@@ -25,8 +25,7 @@ public class EasyInstallmentFlowService implements ServiceFlowHandler {
     private final LineMessageService lineMessageService;
     private final MessagingApiClient messagingApiClient;
 
-    // 🌟 ID กลุ่มแอดมินสำหรับแจ้งเตือน
-    private final String ADMIN_GROUP_ID = "C_YOUR_EASY_INSTALLMENT_ADMIN_GROUP_ID";
+    private final String ADMIN_GROUP_ID = "C8bc47379aa0a51b07e2e0ce58de79aa7";
 
     @Override
     public boolean supports(String serviceName) {

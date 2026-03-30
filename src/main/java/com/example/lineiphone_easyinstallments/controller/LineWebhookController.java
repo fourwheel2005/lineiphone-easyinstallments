@@ -10,9 +10,7 @@ import com.linecorp.bot.messaging.model.ReplyMessageRequest;
 import com.linecorp.bot.messaging.model.TextMessage;
 import com.linecorp.bot.spring.boot.handler.annotation.EventMapping;
 import com.linecorp.bot.spring.boot.handler.annotation.LineMessageHandler;
-import com.linecorp.bot.webhook.model.MessageEvent;
-import com.linecorp.bot.webhook.model.PostbackEvent;
-import com.linecorp.bot.webhook.model.TextMessageContent;
+import com.linecorp.bot.webhook.model.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
@@ -38,31 +36,38 @@ public class LineWebhookController {
 
         if (event.message() instanceof TextMessageContent textMessageContent) {
 
-            String lineUserId = event.source().userId();
-            String userMessage = textMessageContent.text();
+            String userMessage = textMessageContent.text().trim();
             String replyToken = event.replyToken();
+            String lineUserId = event.source().userId();
+
 
             if (event.source() instanceof com.linecorp.bot.webhook.model.GroupSource groupSource) {
-                String groupId = groupSource.groupId();
 
                 if (userMessage.equalsIgnoreCase("/groupid")) {
+                    String groupId = groupSource.groupId();
                     log.info("🎯 มีการเรียกดู Group ID: {}", groupId);
-
                     messagingApiClient.replyMessage(new ReplyMessageRequest(
                             replyToken,
                             List.of(new TextMessage("Group ID ของกลุ่มนี้คือ:\n" + groupId)),
                             false
                     ));
-                    return;
+                    return; // ตอบเสร็จแล้วหยุดทำงาน
                 }
+
+                log.info("🤫 ได้รับข้อความจากกลุ่มแอดมิน บอทจะไม่อ่านและไม่ตอบกลับครับ");
+                return;
+
+            } else if (event.source() instanceof com.linecorp.bot.webhook.model.RoomSource) {
+                log.info("🤫 ได้รับข้อความจาก Room บอทจะไม่อ่านและไม่ตอบกลับครับ");
+                return;
             }
 
-            log.info("📩 ได้รับข้อความจาก [{}]: {}", lineUserId, userMessage);
+
+            log.info("📩 ได้รับข้อความจากลูกค้า [{}]: {}", lineUserId, userMessage);
 
             try {
                 String replyText = chatFlowManager.handleTextMessage(lineUserId, userMessage);
 
-                // 🌟 [จุดแก้ปัญหา] เช็คก่อนว่าบอทมีคำตอบไหม (ถ้าเป็น ADMIN_MODE จะได้ null)
                 if (replyText != null && !replyText.trim().isEmpty()) {
                     messagingApiClient.replyMessage(new ReplyMessageRequest(
                             replyToken,
