@@ -28,11 +28,9 @@ public class PromotionPrice {
     @Column(name = "device_condition", nullable = false)
     private String condition;     // เช่น "มือ 1", "มือ 2"
 
-    // 🌟 ข้อมูลราคาและยอดผ่อน (Price & Installments)
     @Column(name = "down_payment", nullable = false)
     private Integer downPayment;  // ยอดดาวน์
 
-    // ยอดส่งรายเดือน (ใส่ Integer เพราะบางรุ่นอาจไม่มีผ่อนบางเดือน จะได้เป็น null ได้)
     @Column(name = "month_10")
     private Integer month10;
 
