@@ -2,6 +2,8 @@ package com.example.lineiphone_easyinstallments.service.flow;
 
 import com.example.lineiphone_easyinstallments.entity.UserState;
 import com.example.lineiphone_easyinstallments.repository.UserStateRepository;
+// 🌟 นำเข้า MessagingApiClient สำหรับดึงชื่อ
+import com.linecorp.bot.messaging.client.MessagingApiClient;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -13,9 +15,9 @@ public class TradeInFlowService implements ServiceFlowHandler {
 
     private final UserStateRepository userStateRepository;
     private final LineMessageService lineMessageService;
+    private final MessagingApiClient messagingApiClient;
 
-    // 🌟 ใส่ ID กลุ่มแอดมินสำหรับ "ทีมรับซื้อ" แยกต่างหากได้เลยครับ
-    private final String ADMIN_GROUP_ID = "C_YOUR_TRADEIN_ADMIN_GROUP_ID_HERE";
+    private final String ADMIN_GROUP_ID = "C1dbb2becba0306195f3296a32a32bcb";
 
     @Override
     public boolean supports(String serviceName) {
@@ -33,12 +35,14 @@ public class TradeInFlowService implements ServiceFlowHandler {
         String msg = userMessage.trim();
         String userId = userState.getLineUserId();
 
-        // 🚨 ทางออกฉุกเฉิน (ดักคำว่าแอดมิน)
+        // 🚨 ทางออกฉุกเฉิน
         if (msg.contains("แอดมิน") || msg.contains("คุยกับคน")) {
             userState.setPreviousState(state);
             userState.setCurrentState("ADMIN_MODE");
             userStateRepository.save(userState);
-            lineMessageService.sendEmergencyCard(ADMIN_GROUP_ID, "รับซื้อไอโฟน", userId, "ลูกค้าเรียกแอดมิน");
+
+            // ✅ แก้เป็น getCustomerName(userId)
+            lineMessageService.sendEmergencyCard(ADMIN_GROUP_ID, "รับซื้อไอโฟน", getCustomerName(userId), "ลูกค้าเรียกแอดมิน");
             return "รับทราบครับ รบกวนรอแอดมินเข้ามาดูแลสักครู่นะครับ ⏳";
         }
 
@@ -59,10 +63,11 @@ public class TradeInFlowService implements ServiceFlowHandler {
                 userState.setCurrentState("ADMIN_MODE");
                 userStateRepository.save(userState);
 
+                // ✅ แก้เป็น getCustomerName(userId)
                 lineMessageService.sendEmergencyCard(
                         ADMIN_GROUP_ID,
                         "รับซื้อไอโฟน",
-                        userId,
+                        getCustomerName(userId),
                         "ลูกค้ารอประเมินราคารับซื้อ เข้าไปตีราคาได้เลย!"
                 );
 
@@ -77,6 +82,19 @@ public class TradeInFlowService implements ServiceFlowHandler {
                 userState.setCurrentState("STEP_1_INFO");
                 userStateRepository.save(userState);
                 return "เริ่มต้นการประเมินราคาใหม่ครับ รบกวนแจ้งรายละเอียดเครื่องที่จะขายได้เลยครับ";
+        }
+    }
+
+    // ==========================================
+    // 🌟 Helper Method: ฟังก์ชันช่วยดึงชื่อลูกค้า
+    // ==========================================
+    private String getCustomerName(String userId) {
+        try {
+            var profile = messagingApiClient.getProfile(userId).get();
+            return profile.body().displayName();
+        } catch (Exception e) {
+            log.warn("❌ ไม่สามารถดึงชื่อโปรไฟล์ของ userId: {} ได้", userId);
+            return "ลูกค้า (ไม่ทราบชื่อ)";
         }
     }
 }
