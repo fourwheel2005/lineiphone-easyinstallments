@@ -2,6 +2,7 @@ package com.example.lineiphone_easyinstallments.controller;
 
 import com.example.lineiphone_easyinstallments.entity.UserState;
 import com.example.lineiphone_easyinstallments.repository.UserStateRepository;
+import com.example.lineiphone_easyinstallments.service.flow.LineMessageService;
 import com.example.lineiphone_easyinstallments.service.line.ChatFlowManager;
 import com.linecorp.bot.messaging.client.MessagingApiClient;
 import com.linecorp.bot.messaging.model.Message;
@@ -18,10 +19,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-/**
- * คลาสนี้ทำหน้าที่เป็น "หู" และ "ปาก" คอยรับ Event จาก LINE และตอบกลับ
- * (รองรับโครงสร้างใหม่ของ LINE SDK v8+)
- */
+
 @Slf4j
 @RequiredArgsConstructor
 @LineMessageHandler
@@ -30,6 +28,7 @@ public class LineWebhookController {
     private final ChatFlowManager chatFlowManager;
     private final MessagingApiClient messagingApiClient;
     private final UserStateRepository userStateRepository;
+    private final LineMessageService lineMessageService;
 
     @EventMapping
     public void handleTextMessageEvent(MessageEvent event) {
@@ -42,7 +41,6 @@ public class LineWebhookController {
 
 
             if (event.source() instanceof com.linecorp.bot.webhook.model.GroupSource groupSource) {
-
                 if (userMessage.equalsIgnoreCase("/groupid")) {
                     String groupId = groupSource.groupId();
                     log.info("🎯 มีการเรียกดู Group ID: {}", groupId);
@@ -51,20 +49,57 @@ public class LineWebhookController {
                             List.of(new TextMessage("Group ID ของกลุ่มนี้คือ:\n" + groupId)),
                             false
                     ));
-                    return; // ตอบเสร็จแล้วหยุดทำงาน
+                } else {
+                    log.info("🤫 ได้รับข้อความจากกลุ่มแอดมิน บอทจะไม่อ่านและไม่ตอบกลับครับ");
                 }
-
-                log.info("🤫 ได้รับข้อความจากกลุ่มแอดมิน บอทจะไม่อ่านและไม่ตอบกลับครับ");
-                return;
+                return; // 🛑 จบการทำงานทันที ไม่ส่งไปหา AI
 
             } else if (event.source() instanceof com.linecorp.bot.webhook.model.RoomSource) {
                 log.info("🤫 ได้รับข้อความจาก Room บอทจะไม่อ่านและไม่ตอบกลับครับ");
-                return;
+                return; // 🛑 จบการทำงานทันที
             }
 
 
             log.info("📩 ได้รับข้อความจากลูกค้า [{}]: {}", lineUserId, userMessage);
 
+            UserState userState = userStateRepository.findByLineUserId(lineUserId)
+                    .orElseGet(() -> {
+                        UserState newUser = new UserState();
+                        newUser.setLineUserId(lineUserId);
+                        return newUser;
+                    });
+
+
+            String msg = userMessage.toLowerCase();
+            if (msg.contains("แอดมิน") || msg.contains("ติดต่อแอดมิน") || msg.contains("คุยกับคน")) {
+
+                userState.setCurrentState("ADMIN_MODE");
+                userStateRepository.save(userState);
+
+                // ดึงชื่อลูกค้า
+                String customerName = "ลูกค้า (ไม่ทราบชื่อ)";
+                try {
+                    var profile = messagingApiClient.getProfile(lineUserId).get();
+                    customerName = profile.body().displayName();
+                } catch (Exception e) {
+                    log.warn("❌ ไม่สามารถดึงชื่อลูกค้าได้");
+                }
+
+                String MAIN_ADMIN_GROUP_ID = "C3d65aa0511a299f8ed813f4e924e25bc";
+                lineMessageService.sendEmergencyCard(MAIN_ADMIN_GROUP_ID, "สอบถามทั่วไป", customerName, "ลูกค้าต้องการคุยกับแอดมิน");
+
+                messagingApiClient.replyMessage(new ReplyMessageRequest(
+                        replyToken,
+                        List.of(new TextMessage("รับทราบครับ รบกวนรอแอดมินเข้ามาดูแลสักครู่นะครับ ⏳")),
+                        false
+                ));
+
+                return; // 🛑 จบการทำงาน ไม่ต้องส่งไปหา FlowManager แล้ว
+            }
+
+            // ==========================================
+            // 🧠 ด่านที่ 4: ส่งเข้า Flow ปกติ (ลูกค้าคุยทั่วไป หรืออยู่ใน Flow ผ่อน)
+            // ==========================================
             try {
                 String replyText = chatFlowManager.handleTextMessage(lineUserId, userMessage);
 
