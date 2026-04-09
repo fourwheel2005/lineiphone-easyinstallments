@@ -109,8 +109,8 @@ public class BalloonFlowService implements ServiceFlowHandler {
 
                 String ageWarning = "";
                 // แจ้งเตือนหากอายุต่ำกว่า 18 ปี ตามเงื่อนไขเอกสาร
-                if (extractedAge != null && extractedAge < 18) {
-                    ageWarning = "⚠️ (เนื่องจากลูกค้าอายุต่ำกว่า 18 ปี ในขั้นตอนการทำสัญญาจะต้องใช้ข้อมูลผู้ปกครองที่อายุ 20 ปีขึ้นไปมาเป็นผู้ซื้อให้นะครับ)\n\n";
+                if (extractedAge != null && extractedAge > 0 && extractedAge < 18) {
+                    ageWarning = "⚠️ (เนื่องจากลูกค้าอายุต่ำกว่า 18 ปี ในขั้นตอนการทำสัญญาจะต้องใช้ข้อมูลผู้ปกครองที่อายุ 20 ปีขึ้นไปมาเป็นผู้ซื้อให้นะครับ)";
                 }
 
                 userState.setCurrentState("STEP_5_FACEID");
