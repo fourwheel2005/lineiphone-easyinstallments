@@ -15,9 +15,11 @@ import com.linecorp.bot.webhook.model.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import java.time.Instant;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 
 @Slf4j
@@ -29,6 +31,10 @@ public class LineWebhookController {
     private final MessagingApiClient messagingApiClient;
     private final UserStateRepository userStateRepository;
     private final LineMessageService lineMessageService;
+
+
+
+    private final ConcurrentHashMap<String, Instant> lastImageReceivedTime = new ConcurrentHashMap<>();
 
     @EventMapping
     public void handleTextMessageEvent(MessageEvent event) {
@@ -219,5 +225,55 @@ public class LineWebhookController {
             }
         }
         return map;
+    }
+
+
+    @EventMapping
+    public void handleMessageEvent(MessageEvent event) {
+
+        // 1. ดึงข้อมูลแบบใหม่ของ SDK v8.x (ไม่มีคำว่า get นำหน้า)
+        String userId = event.source().userId();
+        String replyToken = event.replyToken();
+
+        // 2. เช็คว่าลูกค้าส่ง "ข้อความ" มาใช่ไหม?
+        if (event.message() instanceof TextMessageContent textMessage) {
+            String msg = textMessage.text();
+            String responseText = chatFlowManager.handleTextMessage(userId, msg);
+
+            if (responseText != null && !responseText.isEmpty()) {
+                lineMessageService.replyText(replyToken, responseText);
+            }
+
+            // 3. เช็คว่าลูกค้าส่ง "รูปภาพ" มาใช่ไหม?
+        } else if (event.message() instanceof ImageMessageContent) {
+
+            // เก็บเวลาที่ได้รับรูปล่าสุด
+            lastImageReceivedTime.put(userId, Instant.now());
+
+            // สร้าง Thread หน่วงเวลารอเผื่อลูกค้าส่งหลายรูป
+            new Thread(() -> {
+                try {
+                    Thread.sleep(3000); // รอ 3 วินาที
+
+                    Instant lastTime = lastImageReceivedTime.get(userId);
+
+                    // ถ้ารูปนี้คือรูปล่าสุดจริงๆ และไม่มีรูปอื่นส่งตามมาใน 2.5 วินาที
+                    if (lastTime != null && Instant.now().minusMillis(2500).isAfter(lastTime)) {
+                        lastImageReceivedTime.remove(userId);
+
+                        // โยนคำว่า [รูปภาพ] เข้า Flow เพื่อให้บอทเดินหน้าต่อ
+                        String dummyMessage = "[รูปภาพ]";
+                        String responseText = chatFlowManager.handleTextMessage(userId, dummyMessage);
+
+                        if (responseText != null && !responseText.isEmpty()) {
+                            // ใช้ replyToken ของรูปภาพแผ่นสุดท้ายในการตอบกลับ
+                            lineMessageService.replyText(replyToken, responseText);
+                        }
+                    }
+                } catch (InterruptedException e) {
+                    log.error("Error during image wait", e);
+                }
+            }).start();
+        }
     }
 }

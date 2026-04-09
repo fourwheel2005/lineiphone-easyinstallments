@@ -4,9 +4,7 @@ package com.example.lineiphone_easyinstallments.service.flow;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.linecorp.bot.messaging.client.MessagingApiClient;
-import com.linecorp.bot.messaging.model.FlexContainer;
-import com.linecorp.bot.messaging.model.FlexMessage;
-import com.linecorp.bot.messaging.model.PushMessageRequest;
+import com.linecorp.bot.messaging.model.*;
 import jakarta.annotation.PostConstruct; // ใช้ javax.annotation.PostConstruct ถ้าเป็น Spring Boot 2
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -134,5 +132,17 @@ public class LineMessageService {
         return input.replace("\"", "\\\"")
                 .replace("\n", " ")
                 .replace("\r", "");
+    }
+
+    public void replyText(String replyToken, String text) {
+        try {
+            List<Message> messages = List.of(new TextMessage(text));
+
+            messagingApiClient.replyMessage(
+                    new ReplyMessageRequest(replyToken, messages, false)
+            );
+        } catch (Exception e) {
+            log.error("❌ ไม่สามารถตอบกลับข้อความได้: ", e);
+        }
     }
 }
