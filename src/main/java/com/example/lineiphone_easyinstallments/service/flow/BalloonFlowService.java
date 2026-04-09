@@ -56,13 +56,17 @@ public class BalloonFlowService implements ServiceFlowHandler {
         String msg = userMessage.trim();
         String userId = userState.getLineUserId();
 
-        // 🚨 ทางออกฉุกเฉิน
-        if (msg.contains("แอดมิน") || msg.contains("คุยกับคน")) {
+        boolean isPanic = msg.contains("แอดมิน") || msg.contains("คุยกับคน") ||
+                msg.contains("อ่านดีๆ") || msg.contains("บอกไปแล้ว") ||
+                msg.contains("บอท") || msg.contains("ไม่รู้เรื่อง") ||
+                msg.contains("อะไรเนี่ย");
+
+        if (isPanic) {
             userState.setPreviousState(state);
             userState.setCurrentState("ADMIN_MODE");
             userStateRepository.save(userState);
-            lineMessageService.sendEmergencyCard(ADMIN_GROUP_ID, "ผ่อนบอลลูน", getCustomerName(userId), "ลูกค้าเรียกแอดมิน");
-            return "รับทราบครับ รบกวนรอแอดมินเข้ามาดูแลสักครู่นะครับ ⏳";
+            lineMessageService.sendEmergencyCard(ADMIN_GROUP_ID, getServiceName(), getCustomerName(userId), "ลูกค้าระบุต้องการคุยกับคน หรือ เกิดความหงุดหงิดบอท");
+            return "รับทราบครับ แอดมินขออภัยในความไม่สะดวกนะครับ 🙏 เดี๋ยวแอดมินตัวจริงรีบเข้ามาดูแลเคสนี้ให้ทันที รบกวนรอสักครู่นะครับ ⏳";
         }
 
         switch (state) {
@@ -165,7 +169,7 @@ public class BalloonFlowService implements ServiceFlowHandler {
                 return "เยี่ยมเลยครับ 😊 แล้วเครื่องมี **ติดผ่อนค้างกับร้านอื่น หรือติดล็อค iCloud** ไหมครับ?";
 
             // ══════════════════════════════════════════════════════════
-            case "STEP_7_PHOTOS": // ตรวจติดผ่อน ขอรูป/ชื่อ
+            case "STEP_7_PHOTOS": // ตรวจติดผ่อน เสร็จแล้วขอรูป
                 // ══════════════════════════════════════════════════════════
                 ScreeningAnswer answerInstallment = aiScreeningService.interpret(msg);
                 log.info("🛡️ [ผ่อนบอลลูน] STEP_7 ติดผ่อน/iCloud? → {}", answerInstallment);
@@ -182,29 +186,41 @@ public class BalloonFlowService implements ServiceFlowHandler {
                             "เช่น 'ไม่ติดผ่อนค่ะ' หรือ 'ติดผ่อนอยู่ครับ'";
                 }
 
-                userState.setCurrentState("STEP_8_SUBMIT_DATA");
+                // ✅ ผ่านการคัดกรองทั้งหมด -> ไปขอรูปก่อน
+                userState.setCurrentState("STEP_8_NAME");
                 userStateRepository.save(userState);
                 return "ผ่านการตรวจสอบเบื้องต้นเรียบร้อยครับ 🎉✅\n\n" +
-                        "เพื่อให้แอดมินประเมินราคาและเช็คเครดิตทีเดียวเลย รบกวนลูกค้า:\n" +
-                        "📸 1. ถ่ายรูปรอบเครื่อง และแคปหน้า 'ตั้งค่า > ทั่วไป > เกี่ยวกับ'\n" +
-                        "✍️ 2. พิมพ์ **ชื่อ-นามสกุล** ส่งมาให้แอดมินได้เลยครับ";
+                        "เพื่อให้แอดมินประเมินราคาได้อย่างแม่นยำ รบกวนลูกค้า:\n" +
+                        "📸 **ถ่ายรูปรอบเครื่อง** และ **แคปหน้า 'ตั้งค่า > ทั่วไป > เกี่ยวกับ'** ส่งมาในแชทนี้ได้เลยครับ";
 
             // ══════════════════════════════════════════════════════════
-            case "STEP_8_SUBMIT_DATA": // รับรูป/ชื่อ เข้า Admin Mode
+            case "STEP_8_NAME": // รับรูปลูกค้า แล้วขอชื่อต่อ
+                // ══════════════════════════════════════════════════════════
+                userState.setCurrentState("STEP_9_SUBMIT_DATA");
+                userStateRepository.save(userState);
+                return "ได้รับรูปภาพเรียบร้อยครับ 📸\n\n" +
+                        "👉 ขั้นตอนสุดท้าย รบกวนลูกค้าพิมพ์ **ชื่อ-นามสกุล** ส่งมาให้แอดมินเพื่อใช้ในการประเมินเครดิตด้วยครับ ✍️";
+
+            // ══════════════════════════════════════════════════════════
+            case "STEP_9_SUBMIT_DATA": // รับชื่อ -> ส่งข้อมูลให้ Admin
                 // ══════════════════════════════════════════════════════════
                 userState.setCurrentState("ADMIN_MODE");
                 userStateRepository.save(userState);
+
+                // 💡 ทริค: ใช้ msg (ที่ลูกค้าพิมชื่อเข้ามา) ส่งไปในการ์ดแอดมินเลย แอดมินจะได้รู้ชื่อจริงทันที
+                String customerRealName = msg;
+                String displayLineName = getCustomerName(userId);
 
                 lineMessageService.sendAdminApprovalCard(
                         ADMIN_GROUP_ID,
                         "ผ่อนบอลลูน",
                         "balloon",
-                        getCustomerName(userId),
+                        customerRealName + " (LINE: " + displayLineName + ")", // แนบทั้งชื่อพิมพ์และชื่อไลน์
                         userId,
                         userState.getDeviceModel() != null ? "รุ่น: " + userState.getDeviceModel() : "รอประเมิน"
                 );
 
-                return "รับข้อมูลเรียบร้อยครับ 📸 แอดมินกำลังตรวจสอบสภาพเครื่องและประวัติเครดิต รบกวนรอสักครู่นะครับ ⏳";
+                return "ได้รับข้อมูลครบถ้วนครับ 📝 แอดมินกำลังตรวจสอบสภาพเครื่องและประวัติเครดิตอย่างละเอียด รบกวนรอสักครู่นะครับ ⏳";
 
             // ══════════════════════════════════════════════════════════
             case "STEP_5_PRICING":

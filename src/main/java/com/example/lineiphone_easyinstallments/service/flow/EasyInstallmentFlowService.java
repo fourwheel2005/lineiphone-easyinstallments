@@ -58,13 +58,18 @@ public class EasyInstallmentFlowService implements ServiceFlowHandler {
         String msg = userMessage.trim();
         String userId = userState.getLineUserId();
 
-        // 🚨 ทางออกฉุกเฉิน
-        if (msg.contains("แอดมิน") || msg.contains("คุยกับคน")) {
+
+        boolean isPanic = msg.contains("แอดมิน") || msg.contains("คุยกับคน") ||
+                msg.contains("อ่านดีๆ") || msg.contains("บอกไปแล้ว") ||
+                msg.contains("บอท") || msg.contains("ไม่รู้เรื่อง") ||
+                msg.contains("อะไรเนี่ย");
+
+        if (isPanic) {
             userState.setPreviousState(state);
             userState.setCurrentState("ADMIN_MODE");
             userStateRepository.save(userState);
-            lineMessageService.sendEmergencyCard(ADMIN_GROUP_ID, "ไอโฟนผ่อนง่าย", getCustomerName(userId), "ลูกค้าเรียกแอดมิน");
-            return "รับทราบครับ รบกวนรอแอดมินเข้ามาดูแลสักครู่นะครับ ⏳";
+            lineMessageService.sendEmergencyCard(ADMIN_GROUP_ID, getServiceName(), getCustomerName(userId), "ลูกค้าระบุต้องการคุยกับคน หรือ เกิดความหงุดหงิดบอท");
+            return "รับทราบครับ แอดมินขออภัยในความไม่สะดวกนะครับ 🙏 เดี๋ยวแอดมินตัวจริงรีบเข้ามาดูแลเคสนี้ให้ทันที รบกวนรอสักครู่นะครับ ⏳";
         }
 
         switch (state) {
@@ -220,7 +225,7 @@ public class EasyInstallmentFlowService implements ServiceFlowHandler {
                 return "เยี่ยมเลยครับ 😊 แล้วเครื่องมี **ติดผ่อนค้างกับร้านอื่น หรือติดล็อค iCloud** ไหมครับ?";
 
             // ══════════════════════════════════════════════════════════
-            case "STEP_9_REQUEST_DOCS":
+            case "STEP_9_CHECK_INSTALLMENT": // ตรวจติดผ่อน เสร็จแล้วขอหน้าบัตร
                 // ══════════════════════════════════════════════════════════
                 ScreeningAnswer answerInstallment = aiScreeningService.interpret(msg);
                 log.info("🛡️ [ผ่อนง่าย] STEP_9 ติดผ่อน/iCloud? → {}", answerInstallment);
@@ -237,29 +242,51 @@ public class EasyInstallmentFlowService implements ServiceFlowHandler {
                             "เช่น 'ไม่ติดผ่อนค่ะ' หรือ 'ติดผ่อนอยู่ครับ'";
                 }
 
-                // ✅ ผ่านการคัดกรองทั้งหมด
-                userState.setCurrentState("STEP_10_WAITING_APPROVAL");
+                // ✅ ผ่านการคัดกรองทั้งหมด -> ขอหน้าบัตรประชาชนก่อน
+                userState.setCurrentState("STEP_10_ID_CARD");
                 userStateRepository.save(userState);
                 return "ผ่านการตรวจสอบเบื้องต้นครบแล้วครับ 🎉✅\n\n" +
                         "การผ่อนกับร้านเรา **ไม่เช็คบูโร** ขอแค่อายุ 18-55 ปี และมีรายได้ครับ\n\n" +
-                        "📸 รบกวนลูกค้าถ่ายรูป **หน้าบัตรประชาชน** พิมพ์ **ชื่อ-นามสกุล** และส่ง **ลิ้งค์เฟสบุ๊ค** มาในแชทนี้ได้เลยครับ\n" +
-                        "แอดมินจะรีบประเมินเครดิตและทำเรื่องอนุมัติให้ทันทีครับ";
+                        "📸 เพื่อดำเนินการต่อ รบกวนลูกค้าถ่ายรูป **หน้าบัตรประชาชน** ส่งมาในแชทนี้ได้เลยครับ";
 
             // ══════════════════════════════════════════════════════════
-            case "STEP_10_WAITING_APPROVAL":
+            case "STEP_10_ID_CARD": // รับหน้าบัตร แล้วขอชื่อต่อ
+                // ══════════════════════════════════════════════════════════
+                userState.setCurrentState("STEP_11_NAME");
+                userStateRepository.save(userState);
+                return "ได้รับรูปบัตรประชาชนเรียบร้อยครับ 🪪\n\n" +
+                        "👉 ถัดไป รบกวนลูกค้าพิมพ์ **ชื่อ-นามสกุล** ส่งมาให้แอดมินหน่อยครับ ✍️";
+
+            // ══════════════════════════════════════════════════════════
+            case "STEP_11_NAME": // รับชื่อ แล้วขอลิ้งค์ Facebook
+                // ══════════════════════════════════════════════════════════
+                userState.setCurrentState("STEP_12_FACEBOOK");
+                userStateRepository.save(userState);
+                return "รับทราบข้อมูลครับ 📝\n\n" +
+                        "👉 ขั้นตอนสุดท้าย เพื่อใช้ในการประเมินเครดิต รบกวนส่ง **ลิ้งค์เฟสบุ๊ค (Facebook)** ของลูกค้ามาให้แอดมินทีนะครับ 🔗\n" +
+                        "(ไปที่หน้าโปรไฟล์เฟสบุ๊ค > กดจุด 3 จุด > คัดลอกลิงก์)";
+
+            // ══════════════════════════════════════════════════════════
+            case "STEP_12_FACEBOOK": // รับ Facebook -> ส่งข้อมูลเข้า Admin Mode
                 // ══════════════════════════════════════════════════════════
                 userState.setCurrentState("ADMIN_MODE");
                 userStateRepository.save(userState);
 
                 String fullDeviceName = userState.getDeviceModel() + " " + userState.getCapacity() + " (" + userState.getCondition() + ")";
+                String displayLineName = getCustomerName(userId);
+                String facebookLink = msg; // สิ่งที่ลูกค้าพิมพ์ล่าสุดคือลิ้งค์เฟส
 
                 lineMessageService.sendAdminApprovalCard(
-                        ADMIN_GROUP_ID, "ไอโฟนผ่อนง่าย", "easy_installment_doc",
-                        getCustomerName(userId), userId, "รุ่น: " + fullDeviceName
+                        ADMIN_GROUP_ID,
+                        "ไอโฟนผ่อนง่าย",
+                        "easy_installment_doc",
+                        displayLineName,
+                        userId,
+                        "รุ่น: " + fullDeviceName + "\nFB: " + facebookLink // แนบลิ้งค์เฟสบุ๊คไปให้แอดมินดูในการ์ดด้วย
                 );
 
-                return "ได้รับข้อมูลเรียบร้อยครับ 📝\n" +
-                        "แอดมินกำลังตรวจสอบเอกสารและประวัติ รบกวนรอผลการอนุมัติสักครู่นะครับ ⏳";
+                return "ได้รับเอกสารและข้อมูลครบถ้วนครับ 📝\n" +
+                        "แอดมินกำลังตรวจสอบเอกสาร ประวัติ และเฟสบุ๊ค รบกวนรอผลการอนุมัติสักครู่นะครับ ⏳";
 
             // ══════════════════════════════════════════════════════════
             case "ADMIN_MODE":
