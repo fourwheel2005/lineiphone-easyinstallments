@@ -49,12 +49,26 @@ public class AiScreeningService {
                     .trim();
 
             // Parse JSON {"answer": "YES"/"NO"/"UNCLEAR"}
-            if (cleaned.contains("\"YES\""))     { log.info("✅ [Screening] → YES");     return ScreeningAnswer.YES; }
-            if (cleaned.contains("\"NO\""))      { log.info("✅ [Screening] → NO");      return ScreeningAnswer.NO;  }
-            if (cleaned.contains("\"UNCLEAR\"")) { log.info("✅ [Screening] → UNCLEAR"); return ScreeningAnswer.UNCLEAR; }
+            // ลบ 3 บรรทัดเดิมออก แล้วใช้ชุดนี้แทน
+            String upper = cleaned.toUpperCase();
+
+            if (upper.contains("UNCLEAR")) {
+                log.info("✅ [Screening] → UNCLEAR");
+                return ScreeningAnswer.UNCLEAR;
+            }
+            if (upper.contains("YES")) {
+                log.info("✅ [Screening] → YES");
+                return ScreeningAnswer.YES;
+            }
+            if (upper.contains("NO")) {
+                log.info("✅ [Screening] → NO");
+                return ScreeningAnswer.NO;
+            }
 
             log.warn("⚠️ [Screening] parse ไม่ได้: {} → ถือว่า UNCLEAR", cleaned);
             return ScreeningAnswer.UNCLEAR;
+
+
 
         } catch (Exception e) {
             log.error("❌ [Screening] Error: ", e);
