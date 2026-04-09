@@ -14,6 +14,19 @@ import org.springframework.stereotype.Service;
 
 import java.util.List;
 
+/**
+ * 💰 SavingsFlowService — ออมดาวน์
+ *
+ * Flow ที่ปรับใหม่ (แยกถามทีละข้อแบบ Sequential):
+ * ─────────────────────────────────────────────────────
+ * STEP_1_MODEL       → แจ้งกติกา / ถามรุ่น
+ * STEP_2_AGE         → สกัดรุ่น / ถามอายุ
+ * STEP_3_TARGET      → สกัดอายุ / เช็คอายุ 18-60 / ถามเป้ายอดดาวน์
+ * STEP_4_FIRST_BILL  → รับเป้ายอดดาวน์ / ถามยอดเปิดบิลแรก
+ * STEP_5_HANDOFF     → รับยอดเปิดบิล / ส่งข้อมูลเข้ากลุ่ม Admin
+ * ADMIN_MODE         → บอทเงียบ
+ * ─────────────────────────────────────────────────────
+ */
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -38,11 +51,11 @@ public class SavingsFlowService implements ServiceFlowHandler {
 
     @Override
     public String processMessage(UserState userState, String userMessage) {
-        String state = userState.getCurrentState() != null ? userState.getCurrentState() : "STEP_1_WELCOME";
+        String state = userState.getCurrentState() != null ? userState.getCurrentState() : "STEP_1_MODEL";
         String msg = userMessage.trim();
         String userId = userState.getLineUserId();
 
-
+        // 🚨 ทางออกฉุกเฉิน
         if (msg.contains("แอดมิน") || msg.contains("คุยกับคน") || msg.contains("คืนเงิน")) {
             userState.setPreviousState(state);
             userState.setCurrentState("ADMIN_MODE");
@@ -52,8 +65,7 @@ public class SavingsFlowService implements ServiceFlowHandler {
         }
 
         // ─────────────────────────────────────────────────────────────
-        // ✅ GLOBAL: ลูกค้าต้องการเปลี่ยน/แก้ไขรุ่นที่สนใจ
-        // รองรับทั้งกรณีพิมพ์ keyword ชัดเจน และกรณีอยู่ใน STEP_3
+        // ✅ GLOBAL: ดัก Keyword ขอเปลี่ยนรุ่น
         // ─────────────────────────────────────────────────────────────
         boolean isChangeModelKeyword =
                 msg.contains("เปลี่ยนรุ่น") ||
@@ -62,43 +74,56 @@ public class SavingsFlowService implements ServiceFlowHandler {
                         msg.contains("สนใจรุ่น")     ||
                         msg.contains("เปลี่ยนเป็น");
 
-        if (isChangeModelKeyword && !"STEP_1_WELCOME".equals(state) && !"ADMIN_MODE".equals(state)) {
+        if (isChangeModelKeyword && !"STEP_1_MODEL".equals(state) && !"ADMIN_MODE".equals(state)) {
             log.info("🔄 ลูกค้าขอเปลี่ยนรุ่น (keyword) จาก state: {}", state);
-            userState.setCurrentState("STEP_2_CHECK_TARGET");
+            // ให้ย้อนกลับไปสเต็ป 2 เพื่อรอรับ "ชื่อรุ่น" อีกครั้ง
+            userState.setCurrentState("STEP_2_AGE");
             userState.setDeviceModel(null);
             userStateRepository.save(userState);
-            return "รับทราบครับ 😊 รบกวนแจ้งรุ่นที่สนใจใหม่ พร้อมอายุของลูกค้าด้วยนะครับ\n" +
-                    "เช่น \"อายุ 25 สนใจ iPhone 16 Pro Max ครับ\" 🙏";
+            return "รับทราบครับ 😊 รบกวนแจ้ง **รุ่นที่สนใจ** ใหม่อีกครั้งให้แอดมินหน่อยครับ 📱";
         }
-
 
         switch (state) {
 
             // ══════════════════════════════════════════════════════════
-            case "STEP_1_WELCOME":
+            case "STEP_1_MODEL":
                 // ══════════════════════════════════════════════════════════
-                userState.setCurrentState("STEP_2_CHECK_TARGET");
+                userState.setCurrentState("STEP_2_AGE");
                 userStateRepository.save(userState);
                 return "ยินดีต้อนรับสู่บริการออมดาวน์ / ออมของ ครับ 💰✨\n\n" +
                         "📌 **กติกาเบื้องต้น:**\n" +
                         "- ออมขั้นต่ำเท่าไหร่ก็ได้ เวลาไหนก็ได้ตามสะดวก\n" +
                         "- ไม่สามารถรับเงินคืนได้ทุกกรณี แต่สามารถเปลี่ยนเป็นสินค้าอื่นแทนได้ครับ\n\n" +
-                        "👉 1. ลูกค้าสนใจออมเป็น iPhone รุ่นไหน (13-17) หรืออุปกรณ์เสริมอะไรครับ?\n" +
-                        "👉 2. ปัจจุบันลูกค้าอายุเท่าไหร่ครับ? (รับอายุ 18-60 ปี)";
+                        "👉 ลูกค้าสนใจออมเป็น iPhone **รุ่นไหน** (13-17) หรืออุปกรณ์เสริมอะไรครับ?";
 
             // ══════════════════════════════════════════════════════════
-            case "STEP_2_CHECK_TARGET":
+            case "STEP_2_AGE":
                 // ══════════════════════════════════════════════════════════
-                log.info("🤖 ส่งข้อความให้ AI วิเคราะห์ (ออมดาวน์ STEP_2): {}", msg);
-                ExtractedData extractedData = aiDataExtractorService.extractInfo(msg);
+                log.info("🤖 ส่งข้อความให้ AI วิเคราะห์หารุ่น (ออมดาวน์ STEP_2): {}", msg);
+                ExtractedData extractedModelData = aiDataExtractorService.extractInfo(msg);
+                String extractedModel = extractedModelData.deviceModel();
 
-                int extractedAge   = extractedData.age() != null ? extractedData.age() : 0;
-                String extractedModel = extractedData.deviceModel();
+                if (extractedModel == null || "unknown".equalsIgnoreCase(extractedModel)) {
+                    return "แอดมินจับชื่อรุ่นไม่ทันครับ 😅 รบกวนขอทราบ 'รุ่นไอโฟน' หรือ 'สินค้า' อีกครั้งชัดๆ ได้ไหมครับ\n" +
+                            "เช่น 15 Pro Max ครับ 🙏";
+                }
 
-                // กรณีข้อมูลไม่ครบ — ถามซ้ำ
-                if (extractedAge == 0 || extractedModel == null || "unknown".equalsIgnoreCase(extractedModel)) {
-                    return "แอดมินรบกวนขอทราบ 'รุ่นที่สนใจ' และ 'อายุ' อีกครั้งให้ชัดเจนได้ไหมครับ\n" +
-                            "เช่น อายุ 22 สนใจ 15 Pro Max ครับ 🙏";
+                userState.setDeviceModel(extractedModel);
+                userState.setCurrentState("STEP_3_TARGET");
+                userStateRepository.save(userState);
+
+                return "รับทราบครับ สนใจออมเป็นรุ่น **" + extractedModel + "** นะครับ 📝\n\n" +
+                        "👉 ปัจจุบันลูกค้า **อายุ** เท่าไหร่ครับ? (รับอายุ 18-60 ปี)";
+
+            // ══════════════════════════════════════════════════════════
+            case "STEP_3_TARGET":
+                // ══════════════════════════════════════════════════════════
+                log.info("🤖 ส่งข้อความให้ AI วิเคราะห์หาอายุ (ออมดาวน์ STEP_3): {}", msg);
+                ExtractedData extractedAgeData = aiDataExtractorService.extractInfo(msg);
+                int extractedAge = extractedAgeData.age() != null ? extractedAgeData.age() : 0;
+
+                if (extractedAge == 0) {
+                    return "แอดมินรบกวนขอทราบ **อายุ** ของลูกค้าอีกครั้งนะครับ พิมพ์แค่ตัวเลขก็ได้ครับ 🙏";
                 }
 
                 if (extractedAge < 18 || extractedAge > 60) {
@@ -108,47 +133,41 @@ public class SavingsFlowService implements ServiceFlowHandler {
                             "เฉพาะลูกค้าที่มีอายุระหว่าง 18 - 60 ปีเท่านั้นครับผม ขอบคุณที่สนใจสอบถามนะครับ";
                 }
 
-                // บันทึกรุ่นและไปต่อ
-                userState.setDeviceModel(extractedModel);
-                userState.setCurrentState("STEP_3_OPEN_BILL");
+                userState.setCurrentState("STEP_4_FIRST_BILL");
                 userStateRepository.save(userState);
 
-                return "รับทราบครับ สนใจออมเป็นรุ่น **" + extractedModel + "** นะครับ 📝\n\n" +
+                return "อายุ " + extractedAge + " ปี ผ่านเกณฑ์ครับ ✅\n\n" +
                         "สำหรับระยะเวลาการออม จะขึ้นอยู่กับยอดดาวน์ที่ลูกค้าตั้งเป้าไว้นะครับ:\n" +
                         "🔹 ยอดดาวน์ไม่เกิน 10,000 บาท = ระยะออมสูงสุด 3 เดือน\n" +
                         "🔹 ยอดดาวน์ 10,000 - 15,000 บาท = ระยะออมสูงสุด 6 เดือน\n" +
                         "🔹 ยอดดาวน์ 15,000 บาทขึ้นไป = ระยะออมสูงสุด 1 ปี\n\n" +
-                        "👉 ลูกค้าตั้งเป้ายอดดาวน์ไว้ที่ประมาณกี่บาทครับ?\n\n" +
+                        "👉 ลูกค้า **ตั้งเป้ายอดดาวน์** ไว้ที่ประมาณกี่บาทครับ?\n\n" +
                         "_(หากต้องการแก้ไขรุ่น พิมพ์ \"เปลี่ยนรุ่น\" ได้เลยนะครับ)_";
 
-            case "STEP_3_OPEN_BILL":
-
-                // 🔍 ตรวจว่าลูกค้าส่งชื่อรุ่นใหม่มาแทนตัวเลขยอดเงินหรือเปล่า
-                log.info("🤖 STEP_3 ตรวจ AI หารุ่นใหม่ในข้อความ: {}", msg);
-                ExtractedData step3Check = aiDataExtractorService.extractInfo(msg);
-
-                boolean hasNewModel = step3Check.deviceModel() != null
-                        && !"unknown".equalsIgnoreCase(step3Check.deviceModel());
-
-                boolean isDifferentModel = hasNewModel
-                        && !step3Check.deviceModel().equalsIgnoreCase(userState.getDeviceModel());
+            // ══════════════════════════════════════════════════════════
+            case "STEP_4_FIRST_BILL":
+                // ══════════════════════════════════════════════════════════
+                // 🔍 ตรวจเผื่อลูกค้าพิมพ์ชื่อรุ่นแทรกมาแทนที่จะเป็นตัวเลขยอดเป้าหมาย
+                ExtractedData step4Check = aiDataExtractorService.extractInfo(msg);
+                boolean hasNewModel = step4Check.deviceModel() != null && !"unknown".equalsIgnoreCase(step4Check.deviceModel());
+                boolean isDifferentModel = hasNewModel && !step4Check.deviceModel().equalsIgnoreCase(userState.getDeviceModel());
 
                 if (isDifferentModel) {
-                    log.info("✏️ อัปเดตรุ่นใหม่: {} → {}", userState.getDeviceModel(), step3Check.deviceModel());
-                    userState.setDeviceModel(step3Check.deviceModel());
+                    log.info("✏️ อัปเดตรุ่นใหม่ใน STEP_4: {} → {}", userState.getDeviceModel(), step4Check.deviceModel());
+                    userState.setDeviceModel(step4Check.deviceModel());
                     userStateRepository.save(userState);
-                    return "รับทราบครับ ขอแก้เป็นรุ่น **" + step3Check.deviceModel() + "** นะครับ ✅\n\n" +
+                    return "รับทราบครับ ขอแก้เป็นรุ่น **" + step4Check.deviceModel() + "** นะครับ ✅\n\n" +
                             "👉 ลูกค้าตั้งเป้ายอดดาวน์ไว้ที่ประมาณกี่บาทครับ?";
                 }
 
-                userState.setCurrentState("STEP_4_HANDOFF");
+                userState.setCurrentState("STEP_5_HANDOFF");
                 userStateRepository.save(userState);
                 return "โอเคครับ ระยะเวลาการออมอยู่ในเกณฑ์ที่กำหนดครับ ✅\n\n" +
                         "เพื่อเป็นการเปิดบัญชีออมดาวน์ในระบบ...\n" +
                         "👉 วันนี้ลูกค้าสะดวก **โอนยอดเปิดบิลแรก** ที่จำนวนเงินเท่าไหร่ดีครับ? (เริ่มต้นกี่บาทก็ได้ครับ)";
 
             // ══════════════════════════════════════════════════════════
-            case "STEP_4_HANDOFF":
+            case "STEP_5_HANDOFF":
                 // ══════════════════════════════════════════════════════════
                 userState.setCurrentState("ADMIN_MODE");
                 userStateRepository.save(userState);
@@ -189,15 +208,16 @@ public class SavingsFlowService implements ServiceFlowHandler {
 
             // ══════════════════════════════════════════════════════════
             case "ADMIN_MODE":
+            case "REJECTED":
                 // ══════════════════════════════════════════════════════════
                 return null; // บอทเงียบกริบ ให้แอดมินดูแลต่อ
 
             // ══════════════════════════════════════════════════════════
             default:
                 // ══════════════════════════════════════════════════════════
-                userState.setCurrentState("STEP_1_WELCOME");
+                userState.setCurrentState("STEP_1_MODEL");
                 userStateRepository.save(userState);
-                return "ระบบเริ่มการทำรายการออมดาวน์ใหม่ครับ รบกวนแจ้งรุ่นที่สนใจ และอายุของลูกค้าครับ";
+                return "ระบบเริ่มการทำรายการออมดาวน์ใหม่ครับ พิมพ์อะไรก็ได้เพื่อเริ่มพูดคุยครับ";
         }
     }
 }

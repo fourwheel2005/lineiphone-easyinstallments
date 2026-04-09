@@ -141,50 +141,61 @@ public class LineWebhookController {
             String adminReplyMessage = "";
             String messageToCustomer = null;
 
-            // 🌟 [จุดเพิ่มฟีเจอร์] กำหนดข้อความตอบแอดมิน และ ข้อความเด้งไปหาลูกค้า
+            // 🌟 ดึง UserState ของลูกค้าคนนี้ขึ้นมาก่อน
+            UserState state = userStateRepository.findByLineUserId(targetUserId).orElse(new UserState());
+            state.setLineUserId(targetUserId);
 
             if (action.equals("approve") || action.equals("approve_doc") || action.equals("approve_credit")) {
                 adminReplyMessage = "✅ เคสของลูกค้าอนุมัติผ่านเรียบร้อย! ระบบแจ้งลูกค้าแล้วครับ";
                 messageToCustomer = "🎉 ยินดีด้วยครับ! ข้อมูลของคุณได้รับการอนุมัติเรียบร้อยแล้ว แอดมินจะรีบดำเนินการขั้นตอนต่อไปให้นะครับ";
-                UserState state = userStateRepository.findByLineUserId(targetUserId).orElse(null);
-                if (state != null) {
-                    if ("balloon".equals(serviceName)) {
-                        state.setCurrentState("STEP_5_PRICING");
-                        userStateRepository.save(state);
 
-                        String nextStepMessage = chatFlowManager.handleTextMessage(targetUserId, "continue");
-                        if (nextStepMessage != null) {
-                            messageToCustomer += nextStepMessage;
-                        }
+                if ("balloon".equals(serviceName)) {
+                    state.setCurrentState("STEP_5_PRICING");
+                    userStateRepository.save(state);
+
+                    String nextStepMessage = chatFlowManager.handleTextMessage(targetUserId, "continue");
+                    if (nextStepMessage != null) {
+                        messageToCustomer += "\n\n" + nextStepMessage;
                     }
                 }
             } else if (action.equals("reject") || action.equals("reject_credit")) {
                 adminReplyMessage = "❌ เคสนี้ถูกปฏิเสธเรียบร้อยครับ";
                 messageToCustomer = "ต้องขออภัยด้วยนะครับ 🙏 จากการตรวจสอบข้อมูล ยังไม่ผ่านเกณฑ์การพิจารณาในครั้งนี้ครับ หากมีข้อสงสัยสามารถพิมพ์สอบถามแอดมินได้เลยครับ";
+
+                // ==========================================
+                // 🚨 โหมดจัดการบอท: ปิด/เปิด AI ด้วยปุ่มของแอดมิน
+                // ==========================================
             } else if (action.equals("take_case")) {
-                adminReplyMessage = "💬 รับเรื่องแล้ว! คุยกับลูกค้าต่อได้เลยครับ";
+                adminReplyMessage = "💬 รับเรื่องแล้ว! (ปิดบอทชั่วคราว) คุยกับลูกค้าต่อใน LINE OA ได้เลยครับ";
                 messageToCustomer = "แอดมินตัวจริงมารับเรื่องแล้วครับ! พิมพ์สอบถามได้เลยครับ 👇";
+
+                state.setCurrentState("ADMIN_MODE");
+                userStateRepository.save(state);
+
             } else if (action.equals("resume_bot")) {
                 adminReplyMessage = "▶️ เปิดบอทให้ดูแลลูกค้าคนนี้ต่อแล้วครับ";
-                // คุณอาจจะต้องเรียก chatFlowManager เพื่ออัปเดต State ให้หลุดจาก ADMIN_MODE ด้วยที่นี่
+                messageToCustomer = "บอทผู้ช่วย DDMobile กลับมาดูแลต่อแล้วครับ! มีอะไรให้ช่วยกดเมนูด้านล่างได้เลยครับ ✨";
+
+                // 🟢 สั่งเปิดบอท! ล้าง State ทิ้งให้กลับไปเป็นปกติ
+                state.setCurrentState(null);
+                state.setLineUserId(null);
+                userStateRepository.save(state);
             }
 
-            // 1. ตอบกลับแอดมินที่กดปุ่ม (Reply)
+            // 1. ตอบกลับแอดมินที่กดปุ่ม (Reply) ในกลุ่ม
             messagingApiClient.replyMessage(new ReplyMessageRequest(
                     event.replyToken(),
                     List.of(new TextMessage(adminReplyMessage)),
                     false
             ));
 
-
+            // 2. ส่งข้อความเด้งไปหาลูกค้า (Push)
             if (messageToCustomer != null) {
-                List<Message> pushMessages = List.of(new TextMessage(messageToCustomer));
-
                 messagingApiClient.pushMessage(
                         null,
                         new PushMessageRequest(
                                 targetUserId,
-                                pushMessages,
+                                List.of(new TextMessage(messageToCustomer)),
                                 false,
                                 (List<String>) null
                         )
