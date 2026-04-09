@@ -33,41 +33,40 @@ public class LineWebhookController {
     private final LineMessageService lineMessageService;
 
 
-
     private final ConcurrentHashMap<String, Instant> lastImageReceivedTime = new ConcurrentHashMap<>();
 
+    // ==========================================
+    // 🟢 รวมฟังก์ชันรับข้อความและรูปภาพไว้ในที่เดียว (รองรับ SDK 8.4.0)
+    // ==========================================
     @EventMapping
-    public void handleTextMessageEvent(MessageEvent event) {
+    public void handleMessageEvent(MessageEvent event) {
+        String replyToken = event.replyToken();
+        String lineUserId = event.source().userId();
 
-        if (event.message() instanceof TextMessageContent textMessageContent) {
-
-            String userMessage = textMessageContent.text().trim();
-            String replyToken = event.replyToken();
-            String lineUserId = event.source().userId();
-
-
-            if (event.source() instanceof com.linecorp.bot.webhook.model.GroupSource groupSource) {
-                if (userMessage.equalsIgnoreCase("/groupid")) {
-                    String groupId = groupSource.groupId();
-                    log.info("🎯 มีการเรียกดู Group ID: {}", groupId);
-                    messagingApiClient.replyMessage(new ReplyMessageRequest(
-                            replyToken,
-                            List.of(new TextMessage("Group ID ของกลุ่มนี้คือ:\n" + groupId)),
-                            false
-                    ));
-                } else {
-                    log.info("🤫 ได้รับข้อความจากกลุ่มแอดมิน บอทจะไม่อ่านและไม่ตอบกลับครับ");
-                }
-                return; // 🛑 จบการทำงานทันที ไม่ส่งไปหา AI
-
-            } else if (event.source() instanceof com.linecorp.bot.webhook.model.RoomSource) {
-                log.info("🤫 ได้รับข้อความจาก Room บอทจะไม่อ่านและไม่ตอบกลับครับ");
-                return; // 🛑 จบการทำงานทันที
+        // 🛑 1. ดักข้อความจาก Group / Room (ไม่ให้บอทอ่านหรือตอบกลับ)
+        if (event.source() instanceof com.linecorp.bot.webhook.model.GroupSource groupSource) {
+            if (event.message() instanceof TextMessageContent txtMsg && txtMsg.text().trim().equalsIgnoreCase("/groupid")) {
+                String groupId = groupSource.groupId();
+                log.info("🎯 มีการเรียกดู Group ID: {}", groupId);
+                messagingApiClient.replyMessage(new ReplyMessageRequest(
+                        replyToken, List.of(new TextMessage("Group ID ของกลุ่มนี้คือ:\n" + groupId)), false
+                ));
+            } else {
+                log.info("🤫 ได้รับข้อความจากกลุ่มแอดมิน บอทจะไม่อ่านและไม่ตอบกลับครับ");
             }
+            return; // จบการทำงาน
+        } else if (event.source() instanceof com.linecorp.bot.webhook.model.RoomSource) {
+            return; // จบการทำงาน
+        }
 
-
+        // ==========================================
+        // ✉️ 2. กรณีลูกค้าส่ง "ข้อความตัวอักษร"
+        // ==========================================
+        if (event.message() instanceof TextMessageContent textMessageContent) {
+            String userMessage = textMessageContent.text().trim();
             log.info("📩 ได้รับข้อความจากลูกค้า [{}]: {}", lineUserId, userMessage);
 
+            // ดึงหรือสร้าง UserState
             UserState userState = userStateRepository.findByLineUserId(lineUserId)
                     .orElseGet(() -> {
                         UserState newUser = new UserState();
@@ -75,14 +74,16 @@ public class LineWebhookController {
                         return newUser;
                     });
 
-
             String msg = userMessage.toLowerCase();
-            if (msg.contains("แอดมิน") || msg.contains("ติดต่อแอดมิน") || msg.contains("คุยกับคน")) {
 
+            boolean isPanic = msg.contains("แอดมิน") || msg.contains("ติดต่อแอดมิน") || msg.contains("คุยกับคน") ||
+                    msg.contains("อ่านดีๆ") || msg.contains("บอท") || msg.contains("บอกไปแล้ว") ||
+                    msg.contains("ไม่รู้เรื่อง") || msg.contains("อะไรเนี่ย");
+
+            if (isPanic) {
                 userState.setCurrentState("ADMIN_MODE");
                 userStateRepository.save(userState);
 
-                // ดึงชื่อลูกค้า
                 String customerName = "ลูกค้า (ไม่ทราบชื่อ)";
                 try {
                     var profile = messagingApiClient.getProfile(lineUserId).get();
@@ -95,40 +96,154 @@ public class LineWebhookController {
                 lineMessageService.sendEmergencyCard(MAIN_ADMIN_GROUP_ID, "สอบถามทั่วไป", customerName, "ลูกค้าต้องการคุยกับแอดมิน");
 
                 messagingApiClient.replyMessage(new ReplyMessageRequest(
-                        replyToken,
-                        List.of(new TextMessage("รับทราบครับ รบกวนรอแอดมินเข้ามาดูแลสักครู่นะครับ ⏳")),
-                        false
+                        replyToken, List.of(new TextMessage("รับทราบครับ รบกวนรอแอดมินเข้ามาดูแลสักครู่นะครับ ⏳")), false
                 ));
-
-                return; // 🛑 จบการทำงาน ไม่ต้องส่งไปหา FlowManager แล้ว
+                return; // จบการทำงาน ไม่ส่งเข้า Flow
             }
 
-            // ==========================================
-            // 🧠 ด่านที่ 4: ส่งเข้า Flow ปกติ (ลูกค้าคุยทั่วไป หรืออยู่ใน Flow ผ่อน)
-            // ==========================================
+            // 🧠 ส่งเข้า Flow ปกติ
             try {
                 String replyText = chatFlowManager.handleTextMessage(lineUserId, userMessage);
-
                 if (replyText != null && !replyText.trim().isEmpty()) {
                     messagingApiClient.replyMessage(new ReplyMessageRequest(
-                            replyToken,
-                            List.of(new TextMessage(replyText)),
-                            false
+                            replyToken, List.of(new TextMessage(replyText)), false
                     ));
-                } else {
-                    log.info("🤫 บอทเข้าโหมดเงียบ (ADMIN_MODE) จะไม่มีการตอบกลับอัตโนมัติ");
                 }
-
             } catch (Exception e) {
                 log.error("❌ เกิดข้อผิดพลาดในการประมวลผลข้อความ: ", e);
                 messagingApiClient.replyMessage(new ReplyMessageRequest(
-                        replyToken,
-                        List.of(new TextMessage("ขออภัยครับ ระบบขัดข้องชั่วคราว รบกวนรอแอดมินสักครู่นะครับ 🛠️")),
-                        false
+                        replyToken, List.of(new TextMessage("ขออภัยครับ ระบบขัดข้องชั่วคราว รบกวนรอแอดมินสักครู่นะครับ 🛠️")), false
                 ));
             }
         }
+
+        // ==========================================
+        // 📸 3. กรณีลูกค้าส่ง "รูปภาพ" (รวบรวมรูปแล้วโยนเข้า Flow)
+        // ==========================================
+        else if (event.message() instanceof ImageMessageContent) {
+
+            lastImageReceivedTime.put(lineUserId, Instant.now());
+            log.info("📸 ได้รับรูปภาพจาก userId: {} -> เริ่มจับเวลา 3 วินาที", lineUserId);
+
+            new Thread(() -> {
+                try {
+                    Thread.sleep(3000); // รอ 3 วินาทีเผื่อส่งหลายรูป
+
+                    Instant lastTime = lastImageReceivedTime.get(lineUserId);
+                    if (lastTime != null && Instant.now().minusMillis(2500).isAfter(lastTime)) {
+                        lastImageReceivedTime.remove(lineUserId);
+                        log.info("⏰ ครบเวลา 3 วินาที -> โยนเข้า Flow [รูปภาพ] userId: {}", lineUserId);
+
+                        String dummyMessage = "[รูปภาพ]";
+                        String responseText = chatFlowManager.handleTextMessage(lineUserId, dummyMessage);
+
+                        if (responseText != null && !responseText.isEmpty()) {
+                            // ตอบกลับด้วย Token ของรูปภาพล่าสุด
+                            messagingApiClient.replyMessage(new ReplyMessageRequest(
+                                    replyToken, List.of(new TextMessage(responseText)), false
+                            ));
+                        }
+                    }
+                } catch (InterruptedException e) {
+                    log.error("Error during image wait", e);
+                }
+            }).start();
+        }
     }
+
+//    @EventMapping
+//    public void handleTextMessageEvent(MessageEvent event) {
+//
+//        if (event.message() instanceof TextMessageContent textMessageContent) {
+//
+//            String userMessage = textMessageContent.text().trim();
+//            String replyToken = event.replyToken();
+//            String lineUserId = event.source().userId();
+//
+//
+//            if (event.source() instanceof com.linecorp.bot.webhook.model.GroupSource groupSource) {
+//                if (userMessage.equalsIgnoreCase("/groupid")) {
+//                    String groupId = groupSource.groupId();
+//                    log.info("🎯 มีการเรียกดู Group ID: {}", groupId);
+//                    messagingApiClient.replyMessage(new ReplyMessageRequest(
+//                            replyToken,
+//                            List.of(new TextMessage("Group ID ของกลุ่มนี้คือ:\n" + groupId)),
+//                            false
+//                    ));
+//                } else {
+//                    log.info("🤫 ได้รับข้อความจากกลุ่มแอดมิน บอทจะไม่อ่านและไม่ตอบกลับครับ");
+//                }
+//                return; // 🛑 จบการทำงานทันที ไม่ส่งไปหา AI
+//
+//            } else if (event.source() instanceof com.linecorp.bot.webhook.model.RoomSource) {
+//                log.info("🤫 ได้รับข้อความจาก Room บอทจะไม่อ่านและไม่ตอบกลับครับ");
+//                return; // 🛑 จบการทำงานทันที
+//            }
+//
+//
+//            log.info("📩 ได้รับข้อความจากลูกค้า [{}]: {}", lineUserId, userMessage);
+//
+//            UserState userState = userStateRepository.findByLineUserId(lineUserId)
+//                    .orElseGet(() -> {
+//                        UserState newUser = new UserState();
+//                        newUser.setLineUserId(lineUserId);
+//                        return newUser;
+//                    });
+//
+//
+//            String msg = userMessage.toLowerCase();
+//            if (msg.contains("แอดมิน") || msg.contains("ติดต่อแอดมิน") || msg.contains("คุยกับคน")) {
+//
+//                userState.setCurrentState("ADMIN_MODE");
+//                userStateRepository.save(userState);
+//
+//                // ดึงชื่อลูกค้า
+//                String customerName = "ลูกค้า (ไม่ทราบชื่อ)";
+//                try {
+//                    var profile = messagingApiClient.getProfile(lineUserId).get();
+//                    customerName = profile.body().displayName();
+//                } catch (Exception e) {
+//                    log.warn("❌ ไม่สามารถดึงชื่อลูกค้าได้");
+//                }
+//
+//                String MAIN_ADMIN_GROUP_ID = "C9a256ba28c79d51b09c6a07f51471b25";
+//                lineMessageService.sendEmergencyCard(MAIN_ADMIN_GROUP_ID, "สอบถามทั่วไป", customerName, "ลูกค้าต้องการคุยกับแอดมิน");
+//
+//                messagingApiClient.replyMessage(new ReplyMessageRequest(
+//                        replyToken,
+//                        List.of(new TextMessage("รับทราบครับ รบกวนรอแอดมินเข้ามาดูแลสักครู่นะครับ ⏳")),
+//                        false
+//                ));
+//
+//                return; // 🛑 จบการทำงาน ไม่ต้องส่งไปหา FlowManager แล้ว
+//            }
+//
+//            // ==========================================
+//            // 🧠 ด่านที่ 4: ส่งเข้า Flow ปกติ (ลูกค้าคุยทั่วไป หรืออยู่ใน Flow ผ่อน)
+//            // ==========================================
+//            try {
+//                String replyText = chatFlowManager.handleTextMessage(lineUserId, userMessage);
+//
+//                if (replyText != null && !replyText.trim().isEmpty()) {
+//                    messagingApiClient.replyMessage(new ReplyMessageRequest(
+//                            replyToken,
+//                            List.of(new TextMessage(replyText)),
+//                            false
+//                    ));
+//                } else {
+//                    log.info("🤫 บอทเข้าโหมดเงียบ (ADMIN_MODE) จะไม่มีการตอบกลับอัตโนมัติ");
+//                }
+//
+//            } catch (Exception e) {
+//                log.error("❌ เกิดข้อผิดพลาดในการประมวลผลข้อความ: ", e);
+//                messagingApiClient.replyMessage(new ReplyMessageRequest(
+//                        replyToken,
+//                        List.of(new TextMessage("ขออภัยครับ ระบบขัดข้องชั่วคราว รบกวนรอแอดมินสักครู่นะครับ 🛠️")),
+//                        false
+//                ));
+//            }
+//        }
+//}
 
     @EventMapping
     public void handlePostbackEvent(PostbackEvent event) {
@@ -228,52 +343,116 @@ public class LineWebhookController {
     }
 
 
-    @EventMapping
-    public void handleMessageEvent(MessageEvent event) {
-
-        // 1. ดึงข้อมูลแบบใหม่ของ SDK v8.x (ไม่มีคำว่า get นำหน้า)
-        String userId = event.source().userId();
-        String replyToken = event.replyToken();
-
-        // 2. เช็คว่าลูกค้าส่ง "ข้อความ" มาใช่ไหม?
-        if (event.message() instanceof TextMessageContent textMessage) {
-            String msg = textMessage.text();
-            String responseText = chatFlowManager.handleTextMessage(userId, msg);
-
-            if (responseText != null && !responseText.isEmpty()) {
-                lineMessageService.replyText(replyToken, responseText);
-            }
-
-            // 3. เช็คว่าลูกค้าส่ง "รูปภาพ" มาใช่ไหม?
-        } else if (event.message() instanceof ImageMessageContent) {
-
-            // เก็บเวลาที่ได้รับรูปล่าสุด
-            lastImageReceivedTime.put(userId, Instant.now());
-
-            // สร้าง Thread หน่วงเวลารอเผื่อลูกค้าส่งหลายรูป
-            new Thread(() -> {
-                try {
-                    Thread.sleep(3000); // รอ 3 วินาที
-
-                    Instant lastTime = lastImageReceivedTime.get(userId);
-
-                    // ถ้ารูปนี้คือรูปล่าสุดจริงๆ และไม่มีรูปอื่นส่งตามมาใน 2.5 วินาที
-                    if (lastTime != null && Instant.now().minusMillis(2500).isAfter(lastTime)) {
-                        lastImageReceivedTime.remove(userId);
-
-                        // โยนคำว่า [รูปภาพ] เข้า Flow เพื่อให้บอทเดินหน้าต่อ
-                        String dummyMessage = "[รูปภาพ]";
-                        String responseText = chatFlowManager.handleTextMessage(userId, dummyMessage);
-
-                        if (responseText != null && !responseText.isEmpty()) {
-                            // ใช้ replyToken ของรูปภาพแผ่นสุดท้ายในการตอบกลับ
-                            lineMessageService.replyText(replyToken, responseText);
-                        }
-                    }
-                } catch (InterruptedException e) {
-                    log.error("Error during image wait", e);
-                }
-            }).start();
-        }
-    }
+    // ==========================================
+    // 🟢 รวมฟังก์ชันรับข้อความและรูปภาพไว้ในที่เดียว (รองรับ SDK 8.4.0)
+    // ==========================================
+//    @EventMapping
+//    public void handleMessageEvent(MessageEvent event) {
+//        String replyToken = event.replyToken();
+//        String lineUserId = event.source().userId();
+//
+//        // 🛑 1. ดักข้อความจาก Group / Room (ไม่ให้บอทอ่านหรือตอบกลับ)
+//        if (event.source() instanceof com.linecorp.bot.webhook.model.GroupSource groupSource) {
+//            if (event.message() instanceof TextMessageContent txtMsg && txtMsg.text().trim().equalsIgnoreCase("/groupid")) {
+//                String groupId = groupSource.groupId();
+//                log.info("🎯 มีการเรียกดู Group ID: {}", groupId);
+//                messagingApiClient.replyMessage(new ReplyMessageRequest(
+//                        replyToken, List.of(new TextMessage("Group ID ของกลุ่มนี้คือ:\n" + groupId)), false
+//                ));
+//            } else {
+//                log.info("🤫 ได้รับข้อความจากกลุ่มแอดมิน บอทจะไม่อ่านและไม่ตอบกลับครับ");
+//            }
+//            return; // จบการทำงาน
+//        } else if (event.source() instanceof com.linecorp.bot.webhook.model.RoomSource) {
+//            return; // จบการทำงาน
+//        }
+//
+//        // ==========================================
+//        // ✉️ 2. กรณีลูกค้าส่ง "ข้อความตัวอักษร"
+//        // ==========================================
+//        if (event.message() instanceof TextMessageContent textMessageContent) {
+//            String userMessage = textMessageContent.text().trim();
+//            log.info("📩 ได้รับข้อความจากลูกค้า [{}]: {}", lineUserId, userMessage);
+//
+//            // ดึงหรือสร้าง UserState
+//            UserState userState = userStateRepository.findByLineUserId(lineUserId)
+//                    .orElseGet(() -> {
+//                        UserState newUser = new UserState();
+//                        newUser.setLineUserId(lineUserId);
+//                        return newUser;
+//                    });
+//
+//            String msg = userMessage.toLowerCase();
+//
+//            // 🚨 ด่านฉุกเฉิน: ลูกค้าพิมพ์เรียกแอดมิน
+//            if (msg.contains("แอดมิน") || msg.contains("ติดต่อแอดมิน") || msg.contains("คุยกับคน")) {
+//                userState.setCurrentState("ADMIN_MODE");
+//                userStateRepository.save(userState);
+//
+//                String customerName = "ลูกค้า (ไม่ทราบชื่อ)";
+//                try {
+//                    var profile = messagingApiClient.getProfile(lineUserId).get();
+//                    customerName = profile.body().displayName();
+//                } catch (Exception e) {
+//                    log.warn("❌ ไม่สามารถดึงชื่อลูกค้าได้");
+//                }
+//
+//                String MAIN_ADMIN_GROUP_ID = "C9a256ba28c79d51b09c6a07f51471b25";
+//                lineMessageService.sendEmergencyCard(MAIN_ADMIN_GROUP_ID, "สอบถามทั่วไป", customerName, "ลูกค้าต้องการคุยกับแอดมิน");
+//
+//                messagingApiClient.replyMessage(new ReplyMessageRequest(
+//                        replyToken, List.of(new TextMessage("รับทราบครับ รบกวนรอแอดมินเข้ามาดูแลสักครู่นะครับ ⏳")), false
+//                ));
+//                return; // จบการทำงาน ไม่ส่งเข้า Flow
+//            }
+//
+//            // 🧠 ส่งเข้า Flow ปกติ
+//            try {
+//                String replyText = chatFlowManager.handleTextMessage(lineUserId, userMessage);
+//                if (replyText != null && !replyText.trim().isEmpty()) {
+//                    messagingApiClient.replyMessage(new ReplyMessageRequest(
+//                            replyToken, List.of(new TextMessage(replyText)), false
+//                    ));
+//                }
+//            } catch (Exception e) {
+//                log.error("❌ เกิดข้อผิดพลาดในการประมวลผลข้อความ: ", e);
+//                messagingApiClient.replyMessage(new ReplyMessageRequest(
+//                        replyToken, List.of(new TextMessage("ขออภัยครับ ระบบขัดข้องชั่วคราว รบกวนรอแอดมินสักครู่นะครับ 🛠️")), false
+//                ));
+//            }
+//        }
+//
+//        // ==========================================
+//        // 📸 3. กรณีลูกค้าส่ง "รูปภาพ" (รวบรวมรูปแล้วโยนเข้า Flow)
+//        // ==========================================
+//        else if (event.message() instanceof ImageMessageContent) {
+//
+//            lastImageReceivedTime.put(lineUserId, Instant.now());
+//            log.info("📸 ได้รับรูปภาพจาก userId: {} -> เริ่มจับเวลา 3 วินาที", lineUserId);
+//
+//            new Thread(() -> {
+//                try {
+//                    Thread.sleep(3000); // รอ 3 วินาทีเผื่อส่งหลายรูป
+//
+//                    Instant lastTime = lastImageReceivedTime.get(lineUserId);
+//                    if (lastTime != null && Instant.now().minusMillis(2500).isAfter(lastTime)) {
+//                        lastImageReceivedTime.remove(lineUserId);
+//                        log.info("⏰ ครบเวลา 3 วินาที -> โยนเข้า Flow [รูปภาพ] userId: {}", lineUserId);
+//
+//                        String dummyMessage = "[รูปภาพ]";
+//                        String responseText = chatFlowManager.handleTextMessage(lineUserId, dummyMessage);
+//
+//                        if (responseText != null && !responseText.isEmpty()) {
+//                            // ตอบกลับด้วย Token ของรูปภาพล่าสุด
+//                            messagingApiClient.replyMessage(new ReplyMessageRequest(
+//                                    replyToken, List.of(new TextMessage(responseText)), false
+//                            ));
+//                        }
+//                    }
+//                } catch (InterruptedException e) {
+//                    log.error("Error during image wait", e);
+//                }
+//            }).start();
+//        }
+//    }
 }
