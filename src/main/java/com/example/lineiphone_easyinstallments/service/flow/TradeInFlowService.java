@@ -17,7 +17,7 @@ public class TradeInFlowService implements ServiceFlowHandler {
     private final LineMessageService lineMessageService;
     private final MessagingApiClient messagingApiClient;
 
-    private final String ADMIN_GROUP_ID = "C1dbb2becba0306195f3296a32a32bcb";
+    private final String ADMIN_GROUP_ID = "Cef2ceeeb8154fbd5dd92d294d467ecd4";
 
     @Override
     public boolean supports(String serviceName) {

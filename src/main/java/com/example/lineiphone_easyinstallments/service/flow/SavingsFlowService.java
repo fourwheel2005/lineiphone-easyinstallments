@@ -24,7 +24,7 @@ public class SavingsFlowService implements ServiceFlowHandler {
     private final AiDataExtractorService aiDataExtractorService;
     private final MessagingApiClient messagingApiClient;
 
-    private final String ADMIN_GROUP_ID = "C7c79cdda1b97da92c07a5c45bda0ab0f";
+    private final String ADMIN_GROUP_ID = "Cecd7b53a894a159778c0555284c943d5";
 
     @Override
     public boolean supports(String serviceName) {

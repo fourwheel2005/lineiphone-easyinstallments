@@ -85,7 +85,7 @@ public class LineWebhookController {
                     log.warn("❌ ไม่สามารถดึงชื่อลูกค้าได้");
                 }
 
-                String MAIN_ADMIN_GROUP_ID = "C3d65aa0511a299f8ed813f4e924e25bc";
+                String MAIN_ADMIN_GROUP_ID = "C9a256ba28c79d51b09c6a07f51471b25";
                 lineMessageService.sendEmergencyCard(MAIN_ADMIN_GROUP_ID, "สอบถามทั่วไป", customerName, "ลูกค้าต้องการคุยกับแอดมิน");
 
                 messagingApiClient.replyMessage(new ReplyMessageRequest(

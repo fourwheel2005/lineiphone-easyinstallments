@@ -80,6 +80,8 @@ public class PriceDataLoader implements CommandLineRunner {
         addPrice("iPad Air 7", "128GB", "มือ 1", 8990, 2390, 1990, null, null, null);
         addPrice("iPad Air 7", "256GB", "มือ 1", 11900, 2690, 2390, null, null, null);
 
+
+
         log.info("✅ นำเข้าข้อมูลราคาโปรโมชั่นทั้งหมดสำเร็จแล้ว พร้อมลุย!!");
     }
 
