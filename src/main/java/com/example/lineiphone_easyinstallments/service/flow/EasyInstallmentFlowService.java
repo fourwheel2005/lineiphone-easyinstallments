@@ -83,7 +83,7 @@ public class EasyInstallmentFlowService implements ServiceFlowHandler {
             // ══════════════════════════════════════════════════════════
             case "STEP_2_CAPACITY":
                 // ══════════════════════════════════════════════════════════
-                ExtractedData extractedModelData = aiDataExtractorService.extractInfo(msg);
+                ExtractedData extractedModelData = aiDataExtractorService.extractInfo(msg, userState.getLastUserMessage());
                 String extractedModel = extractedModelData.deviceModel();
 
                 if (extractedModel == null || "unknown".equalsIgnoreCase(extractedModel)) {
@@ -100,7 +100,7 @@ public class EasyInstallmentFlowService implements ServiceFlowHandler {
             // ══════════════════════════════════════════════════════════
             case "STEP_3_CONDITION":
                 // ══════════════════════════════════════════════════════════
-                ExtractedData extractedCapData = aiDataExtractorService.extractInfo(msg);
+                ExtractedData extractedCapData = aiDataExtractorService.extractInfo(msg, userState.getLastUserMessage());
                 String extractedCapacity = extractedCapData.capacity();
 
                 if (extractedCapacity == null || "unknown".equalsIgnoreCase(extractedCapacity)) {
@@ -116,7 +116,7 @@ public class EasyInstallmentFlowService implements ServiceFlowHandler {
             // ══════════════════════════════════════════════════════════
             case "STEP_4_PROVINCE":
                 // ══════════════════════════════════════════════════════════
-                ExtractedData extractedCondData = aiDataExtractorService.extractInfo(msg);
+                ExtractedData extractedCondData = aiDataExtractorService.extractInfo(msg, userState.getLastUserMessage());
                 String extractedCondition = extractedCondData.condition();
 
                 if (extractedCondition == null || "unknown".equalsIgnoreCase(extractedCondition)) {
@@ -140,7 +140,7 @@ public class EasyInstallmentFlowService implements ServiceFlowHandler {
             // ══════════════════════════════════════════════════════════
             case "STEP_6_PRICE_AND_ID_CARD": // แสดงราคาแล้วขอบัตร ปชช. เลย
                 // ══════════════════════════════════════════════════════════
-                ExtractedData ageData = aiDataExtractorService.extractInfo(msg);
+                ExtractedData ageData = aiDataExtractorService.extractInfo(msg, userState.getLastUserMessage());
                 Integer extractedAge = ageData.age();
 
                 String ageWarning = "";

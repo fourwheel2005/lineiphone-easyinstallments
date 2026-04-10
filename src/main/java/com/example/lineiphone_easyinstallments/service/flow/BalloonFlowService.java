@@ -83,7 +83,7 @@ public class BalloonFlowService implements ServiceFlowHandler {
             case "STEP_2_PROVINCE": // ตรวจรุ่น ถามจังหวัด
                 // ══════════════════════════════════════════════════════════
                 log.info("🤖 [ผ่อนบอลลูน] STEP_2 AI สกัดรุ่นจาก: {}", msg);
-                ExtractedData extractedData = aiDataExtractorService.extractInfo(msg);
+                ExtractedData extractedData = aiDataExtractorService.extractInfo(msg, userState.getLastUserMessage());
                 String extractedModel = extractedData.deviceModel();
 
                 if (extractedModel == null || "unknown".equalsIgnoreCase(extractedModel)) {
@@ -108,7 +108,7 @@ public class BalloonFlowService implements ServiceFlowHandler {
             // ══════════════════════════════════════════════════════════
             case "STEP_4_REPAIR": // รับอายุ ถามซ่อม
                 // ══════════════════════════════════════════════════════════
-                ExtractedData ageData = aiDataExtractorService.extractInfo(msg);
+                ExtractedData ageData = aiDataExtractorService.extractInfo(msg, userState.getLastUserMessage());
                 Integer extractedAge = ageData.age();
 
                 String ageWarning = "";
@@ -126,7 +126,7 @@ public class BalloonFlowService implements ServiceFlowHandler {
             // ══════════════════════════════════════════════════════════
             case "STEP_5_FACEID": // ตรวจซ่อม ถาม FaceID
                 // ══════════════════════════════════════════════════════════
-                ScreeningAnswer answerRepair = aiScreeningService.interpret(msg);
+                ScreeningAnswer answerRepair = aiScreeningService.interpret(msg, userState.getLastUserMessage());
                 log.info("🛡️ [ผ่อนบอลลูน] STEP_5 เคยแกะซ่อม? → {}", answerRepair);
 
                 if (answerRepair == ScreeningAnswer.YES) {
@@ -148,7 +148,7 @@ public class BalloonFlowService implements ServiceFlowHandler {
             // ══════════════════════════════════════════════════════════
             case "STEP_6_INSTALLMENT": // ตรวจ FaceID ถามติดผ่อน
                 // ══════════════════════════════════════════════════════════
-                ScreeningAnswer answerFaceId = aiScreeningService.interpret(msg);
+                ScreeningAnswer answerFaceId = aiScreeningService.interpret(msg, userState.getLastUserMessage());
                 log.info("🛡️ [ผ่อนบอลลูน] STEP_6 Face ID ปกติ? → {}", answerFaceId);
 
                 // NO = ไม่ปกติ (ตกเงื่อนไข)
@@ -171,7 +171,7 @@ public class BalloonFlowService implements ServiceFlowHandler {
             // ══════════════════════════════════════════════════════════
             case "STEP_7_PHOTOS": // ตรวจติดผ่อน เสร็จแล้วขอรูป
                 // ══════════════════════════════════════════════════════════
-                ScreeningAnswer answerInstallment = aiScreeningService.interpret(msg);
+                ScreeningAnswer answerInstallment = aiScreeningService.interpret(msg, userState.getLastUserMessage());
                 log.info("🛡️ [ผ่อนบอลลูน] STEP_7 ติดผ่อน/iCloud? → {}", answerInstallment);
 
                 if (answerInstallment == ScreeningAnswer.YES) {
@@ -205,7 +205,9 @@ public class BalloonFlowService implements ServiceFlowHandler {
             case "STEP_9_SUBMIT_DATA": // รับชื่อ -> ส่งข้อมูลให้ Admin
                 // ══════════════════════════════════════════════════════════
                 userState.setCurrentState("ADMIN_MODE");
+                userState.setFullName(msg);
                 userStateRepository.save(userState);
+
 
                 // 💡 ทริค: ใช้ msg (ที่ลูกค้าพิมชื่อเข้ามา) ส่งไปในการ์ดแอดมินเลย แอดมินจะได้รู้ชื่อจริงทันที
                 String customerRealName = msg;

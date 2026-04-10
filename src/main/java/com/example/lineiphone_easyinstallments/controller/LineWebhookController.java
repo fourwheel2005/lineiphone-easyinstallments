@@ -109,6 +109,8 @@ public class LineWebhookController {
                             replyToken, List.of(new TextMessage(replyText)), false
                     ));
                 }
+                userState.setLastUserMessage(userMessage);
+                userStateRepository.save(userState);
             } catch (Exception e) {
                 log.error("❌ เกิดข้อผิดพลาดในการประมวลผลข้อความ: ", e);
                 messagingApiClient.replyMessage(new ReplyMessageRequest(

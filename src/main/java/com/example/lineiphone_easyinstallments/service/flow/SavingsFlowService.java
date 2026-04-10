@@ -100,7 +100,7 @@ public class SavingsFlowService implements ServiceFlowHandler {
             case "STEP_2_AGE":
                 // ══════════════════════════════════════════════════════════
                 log.info("🤖 ส่งข้อความให้ AI วิเคราะห์หารุ่น (ออมดาวน์ STEP_2): {}", msg);
-                ExtractedData extractedModelData = aiDataExtractorService.extractInfo(msg);
+                ExtractedData extractedModelData = aiDataExtractorService.extractInfo(msg, userState.getLastUserMessage());
                 String extractedModel = extractedModelData.deviceModel();
 
                 if (extractedModel == null || "unknown".equalsIgnoreCase(extractedModel)) {
@@ -119,14 +119,14 @@ public class SavingsFlowService implements ServiceFlowHandler {
             case "STEP_3_TARGET":
                 // ══════════════════════════════════════════════════════════
                 log.info("🤖 ส่งข้อความให้ AI วิเคราะห์หาอายุ (ออมดาวน์ STEP_3): {}", msg);
-                ExtractedData extractedAgeData = aiDataExtractorService.extractInfo(msg);
+                ExtractedData extractedAgeData = aiDataExtractorService.extractInfo(msg, userState.getLastUserMessage());
                 int extractedAge = extractedAgeData.age() != null ? extractedAgeData.age() : 0;
 
                 if (extractedAge == 0) {
                     return "แอดมินรบกวนขอทราบ **อายุ** ของลูกค้าอีกครั้งนะครับ พิมพ์แค่ตัวเลขก็ได้ครับ 🙏";
                 }
 
-                if (extractedAge < 18 || extractedAge > 60) {
+                if (extractedAge < 18 || extractedAge > 55) {
                     userState.setCurrentState("REJECTED");
                     userStateRepository.save(userState);
                     return "ต้องขออภัยด้วยนะครับ 🙏 ทางร้านขอสงวนสิทธิ์ให้บริการออมดาวน์และออมของ " +
@@ -148,7 +148,7 @@ public class SavingsFlowService implements ServiceFlowHandler {
             case "STEP_4_FIRST_BILL":
                 // ══════════════════════════════════════════════════════════
                 // 🔍 ตรวจเผื่อลูกค้าพิมพ์ชื่อรุ่นแทรกมาแทนที่จะเป็นตัวเลขยอดเป้าหมาย
-                ExtractedData step4Check = aiDataExtractorService.extractInfo(msg);
+                ExtractedData step4Check = aiDataExtractorService.extractInfo(msg, userState.getLastUserMessage());
                 boolean hasNewModel = step4Check.deviceModel() != null && !"unknown".equalsIgnoreCase(step4Check.deviceModel());
                 boolean isDifferentModel = hasNewModel && !step4Check.deviceModel().equalsIgnoreCase(userState.getDeviceModel());
 

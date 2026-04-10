@@ -32,6 +32,9 @@ public class UserState {
     @Column(name = "last_updated")
     private LocalDateTime lastUpdated;
 
+    @Column(name = "last_user_message", length = 1000)
+    private String lastUserMessage;
+
     @Column(name = "device_model")
     private String deviceModel;
 

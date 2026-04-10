@@ -22,19 +22,25 @@ public class AiScreeningService {
     }
 
     /**
-     * ตีความคำตอบของลูกค้าว่าเป็น YES / NO / UNCLEAR
+     * ตีความคำตอบของลูกค้าว่าเป็น YES / NO / UNCLEAR (อัปเกรดเพิ่ม Context Memory)
      *
-     * @param userMessage ข้อความที่ลูกค้าพิมพ์
+     * @param currentMessage ข้อความล่าสุดที่ลูกค้าพิมพ์
+     * @param lastMessage ข้อความก่อนหน้าที่ลูกค้าเคยพิมพ์ (ความจำ)
      * @return ScreeningAnswer enum
      */
-    public ScreeningAnswer interpret(String userMessage) {
+    // 🟢 1. แก้ไขให้รับพารามิเตอร์ 2 ตัว
+    public ScreeningAnswer interpret(String currentMessage, String lastMessage) {
         try {
-            log.info("🔍 [Screening] กำลังตีความ: \"{}\"", userMessage);
+            // 🟢 2. รวมประโยคเก่าและใหม่เข้าด้วยกัน (ถ้าไม่มีประโยคเก่าให้บอกว่า "ไม่มี")
+            String context = (lastMessage != null && !lastMessage.trim().isEmpty()) ? lastMessage : "ไม่มี";
+            String combinedMessage = "ข้อความก่อนหน้า: " + context + " | ข้อความล่าสุด: " + currentMessage;
+
+            log.info("🔍 [Screening] กำลังตีความ: {}", combinedMessage);
 
             // 🌟 ใช้ Spring AI ถาม AI ตีความ
             String rawResponse = chatClient.prompt()
                     .system(sys -> sys.text(screeningPromptResource))
-                    .user(u -> u.text(userMessage))
+                    .user(u -> u.text(combinedMessage)) // 🟢 3. ส่งประโยคที่รวมแล้วไปให้ AI
                     .call()
                     .content();
 
@@ -48,10 +54,9 @@ public class AiScreeningService {
                     .replace("```", "")
                     .trim();
 
-            // Parse JSON {"answer": "YES"/"NO"/"UNCLEAR"}
-            // ลบ 3 บรรทัดเดิมออก แล้วใช้ชุดนี้แทน
             String upper = cleaned.toUpperCase();
 
+            // เช็ค UNCLEAR ก่อน เพื่อป้องกันเคสที่ AI ตอบมาว่า "UNCLEAR, it is not YES or NO"
             if (upper.contains("UNCLEAR")) {
                 log.info("✅ [Screening] → UNCLEAR");
                 return ScreeningAnswer.UNCLEAR;
@@ -68,11 +73,9 @@ public class AiScreeningService {
             log.warn("⚠️ [Screening] parse ไม่ได้: {} → ถือว่า UNCLEAR", cleaned);
             return ScreeningAnswer.UNCLEAR;
 
-
-
         } catch (Exception e) {
             log.error("❌ [Screening] Error: ", e);
-            return ScreeningAnswer.UNCLEAR; // Safe default: ถามซ้ำแทนที่จะ reject
+            return ScreeningAnswer.UNCLEAR; // Safe default
         }
     }
 }
