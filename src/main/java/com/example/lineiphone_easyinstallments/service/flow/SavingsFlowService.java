@@ -113,7 +113,7 @@ public class SavingsFlowService implements ServiceFlowHandler {
                 userStateRepository.save(userState);
 
                 return "รับทราบครับ สนใจออมเป็นรุ่น **" + extractedModel + "** นะครับ 📝\n\n" +
-                        "👉 ปัจจุบันลูกค้า **อายุ** เท่าไหร่ครับ? (รับอายุ 18-60 ปี)";
+                        "👉 ปัจจุบันลูกค้า **อายุ** เท่าไหร่ครับ? (รับอายุ 18-55 ปี)";
 
             // ══════════════════════════════════════════════════════════
             case "STEP_3_TARGET":
@@ -130,7 +130,7 @@ public class SavingsFlowService implements ServiceFlowHandler {
                     userState.setCurrentState("REJECTED");
                     userStateRepository.save(userState);
                     return "ต้องขออภัยด้วยนะครับ 🙏 ทางร้านขอสงวนสิทธิ์ให้บริการออมดาวน์และออมของ " +
-                            "เฉพาะลูกค้าที่มีอายุระหว่าง 18 - 60 ปีเท่านั้นครับผม ขอบคุณที่สนใจสอบถามนะครับ";
+                            "เฉพาะลูกค้าที่มีอายุระหว่าง 18 - 55 ปีเท่านั้นครับผม ขอบคุณที่สนใจสอบถามนะครับ";
                 }
 
                 userState.setCurrentState("STEP_4_FIRST_BILL");
@@ -204,7 +204,7 @@ public class SavingsFlowService implements ServiceFlowHandler {
                 );
 
                 return "รับทราบครับ ยอดเปิดบิลแรก " + msg + " 💸\n\n" +
-                        "เดี๋ยวแอดมินตัวจริงจะเข้ามาสรุปเงื่อนไข ส่งเลขบัญชี และทำตารางออมให้นะครับ รบกวนรอแอดมินสักครู่ครับ ⏳";
+                        "เดี๋ยวแอดมินจะเข้ามาสรุปเงื่อนไข ส่งเลขบัญชี และทำตารางออมให้นะครับ รบกวนรอแอดมินสักครู่ครับ ⏳";
 
             // ══════════════════════════════════════════════════════════
             case "ADMIN_MODE":

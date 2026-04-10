@@ -38,6 +38,9 @@ public class UserState {
     @Column(name = "capacity")
     private String capacity;
 
+    @Column(name = "full_name")
+    private String fullName;
+
     @Column(name = "device_condition")
     private String condition;
 
