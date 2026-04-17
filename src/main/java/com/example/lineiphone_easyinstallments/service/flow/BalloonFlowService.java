@@ -107,24 +107,56 @@ public class BalloonFlowService implements ServiceFlowHandler {
 
             // ══════════════════════════════════════════════════════════
             case "STEP_4_REPAIR": // รับอายุ ถามซ่อม
-                // ══════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════
                 ExtractedData ageData = aiDataExtractorService.extractInfo(msg, userState.getLastUserMessage());
                 Integer extractedAge = ageData.age();
 
-                // 🔴 1. ตรวจสอบว่า AI จับตัวเลขอายุได้หรือไม่
+                // 🔴 1. AI จับไม่ได้ → Fallback regex ดึงตัวเลขตรงๆ
+                if (extractedAge == null || extractedAge == 0) {
+                    try {
+                        String numberOnly = msg.replaceAll("[^0-9]", "");
+                        if (!numberOnly.isEmpty()) {
+                            extractedAge = Integer.parseInt(numberOnly);
+                        }
+                    } catch (Exception e) {
+                        log.warn("ไม่สามารถแปลงอายุจากข้อความ: {}", msg);
+                    }
+                }
+
+                // 🔴 2. ยังไม่ได้เลย → ถามซ้ำ ไม่เปลี่ยน state
                 if (extractedAge == null || extractedAge == 0) {
                     return "แอดมินไม่แน่ใจเรื่องอายุครับ 😅 รบกวนลูกค้าพิมพ์ตัวเลขอายุใหม่อีกครั้งนะครับ\n(เช่น 25, 30)";
                 }
 
-                if (extractedAge < 18 || extractedAge > 55) {
-                    userState.setCurrentState("REJECTED"); // ตัดจบการทำงานของบอท
+                // 🟡 3. อายุต่ำกว่า 18 → แจ้งแอดมิน
+                if (extractedAge < 18) {
+                    userState.setCurrentState("ADMIN_MODE");
                     userStateRepository.save(userState);
-                    return "ต้องขออภัยด้วยนะครับ 🙏\n\n" +
-                            "เงื่อนไขของทางร้าน ขอสงวนสิทธิ์สำหรับลูกค้าที่มีอายุระหว่าง **18 - 55 ปี** เท่านั้นครับ\n\n" +
-                            "หากมีข้อสงสัยเพิ่มเติม สามารถพิมพ์ 'แอดมิน' เพื่อสอบถามได้เลยครับ";
+                    lineMessageService.sendEmergencyCard(
+                            ADMIN_GROUP_ID,
+                            getServiceName(),
+                            getCustomerName(userId),
+                            "⚠️ ลูกค้าอายุต่ำกว่าเกณฑ์: " + extractedAge + " ปี — แนะนำให้ผู้ปกครองเป็นคนดำเนินการแทน"
+                    );
+                    return "ขอบคุณที่แจ้งนะครับ 🙏\n\n" +
+                            "เกณฑ์อายุที่กำหนดอยู่ที่ **18 - 55 ปี** รบกวนลูกค้ารอแอดมินมาพิจารณาสักครู่นะครับ ⏳";
                 }
 
-                // 🟢 3. อายุผ่านเกณฑ์ ให้ไปขั้นตอนถามประวัติซ่อมต่อ
+                // 🟡 4. อายุเกิน 55 → แจ้งแอดมินพิจารณา statement
+                if (extractedAge > 55) {
+                    userState.setCurrentState("ADMIN_MODE");
+                    userStateRepository.save(userState);
+                    lineMessageService.sendEmergencyCard(
+                            ADMIN_GROUP_ID,
+                            getServiceName(),
+                            getCustomerName(userId),
+                            "⚠️ ลูกค้าอายุเกินเกณฑ์: " + extractedAge + " ปี — กรุณาพิจารณาจากงาน / Statement / เงินเดือนของลูกค้าครับ"
+                    );
+                    return "ขอบคุณที่แจ้งนะครับ 🙏\n\n" +
+                            "เกณฑ์อายุที่กำหนดอยู่ที่ **18 - 55 ปี** รบกวนลูกค้ารอแอดมินมาพิจารณาสักครู่นะครับ ⏳";
+                }
+
+                // 🟢 5. อายุผ่านเกณฑ์ → ถามประวัติซ่อม
                 userState.setCurrentState("STEP_5_FACEID");
                 userStateRepository.save(userState);
                 return "อายุ " + extractedAge + " ปี รับทราบครับ 🙏\n\n" +

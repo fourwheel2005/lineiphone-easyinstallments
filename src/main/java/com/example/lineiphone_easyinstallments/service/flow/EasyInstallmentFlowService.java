@@ -155,25 +155,56 @@ public class EasyInstallmentFlowService implements ServiceFlowHandler {
                 return "โอเคครับ 📍\n" +
                         "👉 แล้วลูกค้า **อายุ** เท่าไหร่ครับ?";
 
-            // ... (โค้ด STEP_7 เป็นต้นไป ให้เลื่อนตัวเลขขึ้น 1 สเตปทั้งหมดให้สอดคล้องกันครับ)
-
-            // ══════════════════════════════════════════════════════════
             case "STEP_7_PRICE_AND_ID_CARD": // รับอายุ -> ตรวจสอบ 18-55 -> เช็คราคา
                 // ══════════════════════════════════════════════════════════
                 ExtractedData ageData = aiDataExtractorService.extractInfo(msg, userState.getLastUserMessage());
                 Integer extractedAge = ageData.age();
 
+                // Fallback: ดึงตัวเลขจากข้อความตรงๆ
+                if (extractedAge == null || extractedAge == 0) {
+                    try {
+                        String numberOnly = msg.replaceAll("[^0-9]", "");
+                        if (!numberOnly.isEmpty()) {
+                            extractedAge = Integer.parseInt(numberOnly);
+                        }
+                    } catch (Exception e) {
+                        log.warn("ไม่สามารถแปลงอายุจากข้อความ: {}", msg);
+                    }
+                }
+
+                // ยังไม่ได้อายุ → ถามใหม่ (ไม่เปลี่ยน state)
                 if (extractedAge == null || extractedAge == 0) {
                     return "แอดมินไม่แน่ใจเรื่องอายุครับ 😅 รบกวนลูกค้าพิมพ์ตัวเลขอายุใหม่อีกครั้งนะครับ\n(เช่น 25, 30)";
                 }
 
-                if (extractedAge < 18 || extractedAge > 55) {
-                    userState.setCurrentState("REJECTED"); // ตัดจบการทำงานของบอท
+                // ✅ อายุน้อยกว่า 18 → ส่งแอดมิน
+                if (extractedAge < 18) {
+                    userState.setCurrentState("ADMIN_MODE");
                     userStateRepository.save(userState);
-                    return "ต้องขออภัยด้วยนะครับ 🙏\n\n" +
-                            "เงื่อนไขการผ่อนของทางร้าน ขอสงวนสิทธิ์สำหรับลูกค้าที่มีอายุระหว่าง **18 - 55 ปี** เท่านั้นครับ\n\n" +
-                            "หากมีข้อสงสัยเพิ่มเติม สามารถพิมพ์ 'แอดมิน' เพื่อสอบถามได้เลยครับ";
+                    lineMessageService.sendEmergencyCard(
+                            ADMIN_GROUP_ID,
+                            getServiceName(),
+                            getCustomerName(userId),
+                            "⚠️ ลูกค้าอายุต่ำกว่าเกณฑ์: " + extractedAge + " ปี (ต่ำกว่า 18) — แนะนำแอดมินให้คำแนะนำให้ผู้ปกครองเป็นคนดำเนินการแทน"
+                    );
+                    return "ขอบคุณที่แจ้งนะครับ 🙏\n\n" +
+                            "เกณฑ์อายุที่กำหนดอยู่ที่ **18 - 55 ปี** รบกวนลูกค้ารอแอดมินมาพิจารณาสักครู่นะครับ ⏳";
                 }
+
+                // ✅ อายุมากกว่า 55 → ส่งแอดมินพิจารณา (อาจผ่านได้ถ้ามี statement)
+                if (extractedAge > 55) {
+                    userState.setCurrentState("ADMIN_MODE");
+                    userStateRepository.save(userState);
+                    lineMessageService.sendEmergencyCard(
+                            ADMIN_GROUP_ID,
+                            getServiceName(),
+                            getCustomerName(userId),
+                            "⚠️ ลูกค้าอายุเกินเกณฑ์: " + extractedAge + " ปี (เกิน 55) — กรุณาพิจารณาจากงาน / Statement / เงินเดือนของลูกค้าครับ"
+                    );
+                    return "ขอบคุณที่แจ้งนะครับ 🙏\n\n" +
+                            "เกณฑ์อายุที่กำหนดอยู่ที่ **18 - 55 ปี** รบกวนลูกค้ารอแอดมินมาพิจารณาสักครู่นะครับ ⏳";
+                }
+
 
                 String savedModel = userState.getDeviceModel();
                 String savedCapacity = userState.getCapacity();
