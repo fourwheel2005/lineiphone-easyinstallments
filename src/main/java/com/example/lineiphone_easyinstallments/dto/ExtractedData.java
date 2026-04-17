@@ -5,5 +5,8 @@ public record ExtractedData(
         Integer age,
         String deviceModel,
         String capacity,   // 🌟 เพิ่มฟิลด์ความจุ
-        String condition
+        String condition,
+        Integer batteryHealth,
+        String accessories,
+        String repairHistory
 ) {}

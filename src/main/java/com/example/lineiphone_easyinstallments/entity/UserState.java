@@ -41,6 +41,15 @@ public class UserState {
     @Column(name = "capacity")
     private String capacity;
 
+    @Column(name = "battery_health")
+    private Integer batteryHealth;
+
+    @Column(name = "accessories")
+    private String accessories;
+
+    @Column(name = "repair_history")
+    private String repairHistory;
+
     @Column(name = "full_name")
     private String fullName;
 

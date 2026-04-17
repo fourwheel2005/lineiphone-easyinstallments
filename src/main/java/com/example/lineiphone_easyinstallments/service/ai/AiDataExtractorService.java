@@ -44,20 +44,25 @@ public class AiDataExtractorService {
                     .entity(ExtractedData.class);
 
             // 🌟 อัปเดต Log ให้โชว์ข้อมูลครบถ้วน
-            log.info("✅ [Extractor] สกัดข้อมูลสำเร็จ: Age={}, Model={}, Capacity={}, Condition={}",
-                    result.age(), result.deviceModel(), result.capacity(), result.condition());
 
-            // 🌟 ดักจับ Null และใส่ค่า Default เป็น "unknown" ถ้าลูกค้าไม่ได้พิมพ์บอกมา
+            log.info("✅ [Extractor] สกัดข้อมูลสำเร็จ: Model={}, Capacity={}, Battery={}, Accessories={}, Repair={}",
+                    result.deviceModel(), result.capacity(), result.batteryHealth(), result.accessories(), result.repairHistory());
+
+            // 🌟 ดักจับ Null และใส่ค่า Default
             return new ExtractedData(
                     result.age() != null ? result.age() : 0,
                     result.deviceModel() != null && !result.deviceModel().isEmpty() ? result.deviceModel() : "unknown",
                     result.capacity() != null && !result.capacity().isEmpty() ? result.capacity() : "unknown",
-                    result.condition() != null && !result.condition().isEmpty() ? result.condition() : "unknown"
+                    result.condition() != null && !result.condition().isEmpty() ? result.condition() : "unknown",
+                    result.batteryHealth() != null ? result.batteryHealth() : 0, // 👈 แบตเตอรี่
+                    result.accessories() != null && !result.accessories().isEmpty() ? result.accessories() : "unknown", // 👈 อุปกรณ์
+                    result.repairHistory() != null && !result.repairHistory().isEmpty() ? result.repairHistory() : "unknown" // 👈 ประวัติซ่อม
             );
 
         } catch (Exception e) {
             log.error("❌ [Extractor] ทำงานล้มเหลว: ", e);
-            return new ExtractedData(0, "unknown", "unknown", "unknown");
+            // เพิ่มค่า Default สำหรับฟิลด์แบตเตอรี่(0), อุปกรณ์("unknown"), ประวัติซ่อม("unknown") เข้าไปให้ครบ 7 ค่า
+            return new ExtractedData(0, "unknown", "unknown", "unknown", 0, "unknown", "unknown");
         }
     }
 }
