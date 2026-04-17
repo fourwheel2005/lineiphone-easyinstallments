@@ -13,6 +13,7 @@ import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StreamUtils;
 
+import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.UUID;
@@ -143,6 +144,34 @@ public class LineMessageService {
             );
         } catch (Exception e) {
             log.error("❌ ไม่สามารถตอบกลับข้อความได้: ", e);
+        }
+    }
+
+    /**
+     * @param to       Line User ID ของลูกค้า
+     * @param imageUrl URL ของรูปภาพ (⚠️ ต้องเป็น HTTPS เท่านั้น)
+     */
+    public void sendImage(String to, String imageUrl) {
+        try {
+            // แก้ Error 1: แปลง String ให้เป็นอ็อบเจกต์ URI
+            ImageMessage imageMessage = new ImageMessage(URI.create(imageUrl), URI.create(imageUrl));
+
+            // แก้ Error 2: ใช้ Constructor สร้าง Object แทนการใช้ Builder
+            PushMessageRequest pushMessageRequest = new PushMessageRequest(
+                    to,
+                    List.of(imageMessage),
+                    false, // notificationDisabled: ใส่ false เพื่อให้มีเสียงแจ้งเตือนปกติ
+                    null   // customAggregationUnits: ไม่ได้ใช้ ใส่ null ได้เลย
+            );
+
+            UUID retryKey = UUID.randomUUID();
+
+            messagingApiClient.pushMessage(retryKey, pushMessageRequest).get();
+
+            log.info("📸 ส่งรูปภาพตัวอย่างสำเร็จถึง: {}", to);
+
+        } catch (Exception e) {
+            log.error("❌ เกิดข้อผิดพลาดในการส่งรูปภาพถึง: {}", to, e);
         }
     }
 }

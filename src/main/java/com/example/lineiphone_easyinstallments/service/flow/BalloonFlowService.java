@@ -166,10 +166,12 @@ public class BalloonFlowService implements ServiceFlowHandler {
 
                 userState.setCurrentState("STEP_7_PHOTOS");
                 userStateRepository.save(userState);
-                return "เยี่ยมเลยครับ 😊 แล้วเครื่องมี **ติดผ่อนค้างกับร้านอื่น หรือติดล็อค iCloud** ไหมครับ?";
+                return "เยี่ยมเลยครับ 😊 แล้วเครื่องมี **ติดผ่อนกับร้านอื่น หรือติดใส่iCloud ร้านอื่น** ไหมครับ?";
+
+            // ... (ส่วน Import และหัว Class เหมือนเดิม)
 
             // ══════════════════════════════════════════════════════════
-            case "STEP_7_PHOTOS": // ตรวจติดผ่อน เสร็จแล้วขอรูป
+            case "STEP_7_DEVICE_PHOTOS": // ตรวจติดผ่อน เสร็จแล้วขอรูปรอบเครื่องก่อน
                 // ══════════════════════════════════════════════════════════
                 ScreeningAnswer answerInstallment = aiScreeningService.interpret(msg, userState.getLastUserMessage());
                 log.info("🛡️ [ผ่อนบอลลูน] STEP_7 ติดผ่อน/iCloud? → {}", answerInstallment);
@@ -178,38 +180,53 @@ public class BalloonFlowService implements ServiceFlowHandler {
                     userState.setCurrentState("REJECTED");
                     userStateRepository.save(userState);
                     return "ต้องขออภัยด้วยนะครับ 🙏\n" +
-                            "ทางร้านไม่สามารถรับเครื่องที่ติดผ่อนหรือมีการล็อค iCloud ครับ\n" +
-                            "หากต้องการสอบถามเพิ่มเติม พิมพ์ 'แอดมิน' ได้เลยนะครับ";
+                            "ทางร้านไม่สามารถรับเครื่องที่ติดผ่อนหรือมีการล็อค iCloud ครับ";
                 }
                 if (answerInstallment == ScreeningAnswer.UNCLEAR) {
-                    return "ขออภัยด้วยนะครับ 😅 รบกวนตอบให้ชัดขึ้นได้ไหมครับ\n" +
-                            "เช่น 'ไม่ติดผ่อนค่ะ' หรือ 'ติดผ่อนอยู่ครับ'";
+                    return "ขออภัยด้วยนะครับ 😅 รบกวนตอบให้ชัดขึ้นได้ไหมครับ เช่น 'ไม่ติดผ่อนค่ะ'";
                 }
 
-                // ✅ ผ่านการคัดกรองทั้งหมด -> ไปขอรูปก่อน
-                userState.setCurrentState("STEP_8_NAME");
+                // ✅ ผ่านการคัดกรอง -> ขอรูปรอบเครื่องก่อน
+                userState.setCurrentState("STEP_8_SETTINGS_PHOTO");
                 userStateRepository.save(userState);
                 return "ผ่านการตรวจสอบเบื้องต้นเรียบร้อยครับ 🎉✅\n\n" +
-                        "เพื่อให้แอดมินประเมินราคาได้อย่างแม่นยำ รบกวนลูกค้า:\n" +
-                        "📸 **ถ่ายรูปรอบเครื่อง** และ **แคปหน้า 'ตั้งค่า > ทั่วไป > เกี่ยวกับ'** ส่งมาในแชทนี้ได้เลยครับ";
+                        "เพื่อให้แอดมินประเมินสภาพภายนอกได้ชัดเจน รบกวนลูกค้า:\n" +
+                        "📸 **ถ่ายรูปรอบเครื่อง 4-5 รูป** (ด้านหน้า ด้านหลัง และขอบข้าง)\n" +
+                        "ส่งมาในแชทนี้ได้เลยครับ (สามารถถ่ายผ่านกระจกเงาได้ครับ)";
 
             // ══════════════════════════════════════════════════════════
-            case "STEP_8_NAME": // รับรูปลูกค้า แล้วขอชื่อต่อ
+            case "STEP_8_SETTINGS_PHOTO": // รับรูปรอบเครื่อง -> แล้วขอรูปหน้าตั้งค่า (พร้อมตัวอย่าง)
                 // ══════════════════════════════════════════════════════════
-                userState.setCurrentState("STEP_9_SUBMIT_DATA");
+                // หมายเหตุ: ใน Logic จริง คุณอาจต้องเช็คว่า User ส่ง Image มาจริงๆ หรือไม่ใน Webhook
+                // แต่ใน Flow นี้เราจะข้ามไป Step ถัดไปเมื่อมีการโต้ตอบ
+
+                userState.setCurrentState("STEP_9_NAME");
                 userStateRepository.save(userState);
-                return "ได้รับรูปภาพเรียบร้อยครับ 📸\n\n" +
+
+                String exampleImageUrl = "https://raw.githubusercontent.com/fourwheel2005/image/main/S__8298515.jpg"; // ใส่ URL รูปตัวอย่างของคุณ
+                lineMessageService.sendImage(userId, exampleImageUrl);
+
+                // 2. ส่งข้อความยิงคำขอรูปภาพ
+                return "ได้รับรูปรอบเครื่องเรียบร้อยครับ สวยมากครับ! ✨\n\n" +
+                        "ถัดไป รบกวนลูกค้า **แคปหน้าจอ 'การตั้งค่า > ทั่วไป > เกี่ยวกับ'**\n" +
+                        "ส่งมาให้แอดมินดูรุ่นและความจุที่แน่นอนหน่อยครับ\n" +
+                        "(ตามรูปตัวอย่างที่แอดมินส่งให้ด้านบนเลยครับ ☝️)";
+
+            // ══════════════════════════════════════════════════════════
+            case "STEP_9_NAME": // รับรูปหน้าตั้งค่า -> แล้วขอชื่อ
+                // ══════════════════════════════════════════════════════════
+                userState.setCurrentState("STEP_10_SUBMIT_DATA");
+                userStateRepository.save(userState);
+                return "ได้รับข้อมูลเครื่องครบถ้วนครับ 📸📱\n\n" +
                         "👉 ขั้นตอนสุดท้าย รบกวนลูกค้าพิมพ์ **ชื่อ-นามสกุล** ส่งมาให้แอดมินเพื่อใช้ในการประเมินเครดิตด้วยครับ ✍️";
 
             // ══════════════════════════════════════════════════════════
-            case "STEP_9_SUBMIT_DATA": // รับชื่อ -> ส่งข้อมูลให้ Admin
+            case "STEP_10_SUBMIT_DATA": // รับชื่อ -> ส่งข้อมูลให้ Admin
                 // ══════════════════════════════════════════════════════════
                 userState.setCurrentState("ADMIN_MODE");
                 userState.setFullName(msg);
                 userStateRepository.save(userState);
 
-
-                // 💡 ทริค: ใช้ msg (ที่ลูกค้าพิมชื่อเข้ามา) ส่งไปในการ์ดแอดมินเลย แอดมินจะได้รู้ชื่อจริงทันที
                 String customerRealName = msg;
                 String displayLineName = getCustomerName(userId);
 
@@ -217,12 +234,13 @@ public class BalloonFlowService implements ServiceFlowHandler {
                         ADMIN_GROUP_ID,
                         "ผ่อนบอลลูน",
                         "balloon",
-                        customerRealName + " (LINE: " + displayLineName + ")", // แนบทั้งชื่อพิมพ์และชื่อไลน์
+                        customerRealName + " (LINE: " + displayLineName + ")",
                         userId,
                         userState.getDeviceModel() != null ? "รุ่น: " + userState.getDeviceModel() : "รอประเมิน"
                 );
 
                 return "ได้รับข้อมูลครบถ้วนครับ 📝 แอดมินกำลังตรวจสอบสภาพเครื่องและประวัติเครดิตอย่างละเอียด รบกวนรอสักครู่นะครับ ⏳";
+// ...
 
             // ══════════════════════════════════════════════════════════
             case "STEP_5_PRICING":
