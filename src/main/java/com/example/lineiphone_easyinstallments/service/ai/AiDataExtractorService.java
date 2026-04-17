@@ -56,13 +56,14 @@ public class AiDataExtractorService {
                     result.condition() != null && !result.condition().isEmpty() ? result.condition() : "unknown",
                     result.batteryHealth() != null ? result.batteryHealth() : 0, // 👈 แบตเตอรี่
                     result.accessories() != null && !result.accessories().isEmpty() ? result.accessories() : "unknown", // 👈 อุปกรณ์
-                    result.repairHistory() != null && !result.repairHistory().isEmpty() ? result.repairHistory() : "unknown" // 👈 ประวัติซ่อม
+                    result.repairHistory() != null && !result.repairHistory().isEmpty() ? result.repairHistory() : "unknown",// 👈 ประวัติซ่อม
+                    result.color() != null && !result.color().isEmpty() ? result.color() : "unknown"
             );
 
         } catch (Exception e) {
             log.error("❌ [Extractor] ทำงานล้มเหลว: ", e);
             // เพิ่มค่า Default สำหรับฟิลด์แบตเตอรี่(0), อุปกรณ์("unknown"), ประวัติซ่อม("unknown") เข้าไปให้ครบ 7 ค่า
-            return new ExtractedData(0, "unknown", "unknown", "unknown", 0, "unknown", "unknown");
+            return new ExtractedData(0, "unknown", "unknown", "unknown", 0, "unknown", "unknown","unknown");
         }
     }
 }

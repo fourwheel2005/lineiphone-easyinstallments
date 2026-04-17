@@ -8,5 +8,6 @@ public record ExtractedData(
         String condition,
         Integer batteryHealth,
         String accessories,
-        String repairHistory
+        String repairHistory,
+        String color
 ) {}

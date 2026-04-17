@@ -111,15 +111,23 @@ public class BalloonFlowService implements ServiceFlowHandler {
                 ExtractedData ageData = aiDataExtractorService.extractInfo(msg, userState.getLastUserMessage());
                 Integer extractedAge = ageData.age();
 
-                String ageWarning = "";
-                // แจ้งเตือนหากอายุต่ำกว่า 18 ปี ตามเงื่อนไขเอกสาร
-                if (extractedAge != null && extractedAge > 0 && extractedAge < 18) {
-                    ageWarning = "⚠️ (เนื่องจากลูกค้าอายุต่ำกว่า 18 ปี ในขั้นตอนการทำสัญญาจะต้องใช้ข้อมูลผู้ปกครองที่อายุ 20 ปีขึ้นไปมาเป็นผู้ซื้อให้นะครับ)";
+                // 🔴 1. ตรวจสอบว่า AI จับตัวเลขอายุได้หรือไม่
+                if (extractedAge == null || extractedAge == 0) {
+                    return "แอดมินไม่แน่ใจเรื่องอายุครับ 😅 รบกวนลูกค้าพิมพ์ตัวเลขอายุใหม่อีกครั้งนะครับ\n(เช่น 25, 30)";
                 }
 
+                if (extractedAge < 18 || extractedAge > 55) {
+                    userState.setCurrentState("REJECTED"); // ตัดจบการทำงานของบอท
+                    userStateRepository.save(userState);
+                    return "ต้องขออภัยด้วยนะครับ 🙏\n\n" +
+                            "เงื่อนไขของทางร้าน ขอสงวนสิทธิ์สำหรับลูกค้าที่มีอายุระหว่าง **18 - 55 ปี** เท่านั้นครับ\n\n" +
+                            "หากมีข้อสงสัยเพิ่มเติม สามารถพิมพ์ 'แอดมิน' เพื่อสอบถามได้เลยครับ";
+                }
+
+                // 🟢 3. อายุผ่านเกณฑ์ ให้ไปขั้นตอนถามประวัติซ่อมต่อ
                 userState.setCurrentState("STEP_5_FACEID");
                 userStateRepository.save(userState);
-                return "ขอบคุณสำหรับข้อมูลครับ 🙏\n" + ageWarning +
+                return "อายุ " + extractedAge + " ปี รับทราบครับ 🙏\n\n" +
                         "ถัดไปขออนุญาตเช็คประวัติเครื่องนิดนึงนะครับ 🔍\n" +
                         "👉 เครื่องเคยแกะซ่อม หรือเปลี่ยนชิ้นส่วนใดๆ มาไหมครับ?";
 

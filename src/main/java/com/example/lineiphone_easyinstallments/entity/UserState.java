@@ -56,6 +56,9 @@ public class UserState {
     @Column(name = "device_condition")
     private String condition;
 
+    @Column(name = "color")
+    private String color;
+
     @PrePersist
     @PreUpdate
     public void updateTimestamp() {
