@@ -11,24 +11,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
-/**
- * 🎈 BalloonFlowService — ผ่อนบอลลูน
- *
- * Flow ที่ปรับใหม่ (ถามทีละข้อ แยกกันแบบ Sequential):
- * ─────────────────────────────────────────────────────
- * STEP_1_INFO              → ถามรุ่น/ความจุ
- * STEP_2_PROVINCE          → ตรวจรุ่น → ถามจังหวัด
- * STEP_3_AGE               → รับจังหวัด → ถามอายุ
- * STEP_4_REPAIR            → รับอายุ → ถามแกะซ่อม
- * STEP_5_FACEID            → ตรวจซ่อม → ถาม Face ID
- * STEP_6_INSTALLMENT       → ตรวจ Face ID → ถามติดผ่อน
- * STEP_7_PHOTOS            → ตรวจติดผ่อน → ขอรูปเครื่องและชื่อ
- * STEP_8_SUBMIT_DATA       → รับรูป → บอทแจ้งเตือน Admin โหมด
- * STEP_5_PRICING           → Admin ตั้งราคา (คงชื่อ State เดิมไว้ไม่ให้กระทบระบบอื่น)
- * STEP_6_MONTH_SELECTION   → ลูกค้าเลือกจำนวนงวด
- * ADMIN_MODE               → บอทเงียบ
- * ─────────────────────────────────────────────────────
- */
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -40,12 +22,15 @@ public class BalloonFlowService implements ServiceFlowHandler {
     private final AiDataExtractorService aiDataExtractorService;
     private final AiScreeningService aiScreeningService;
 
+    // 🔴 ใช้ Group ID ของโปรเจกต์ easyinstallments
     private final String ADMIN_GROUP_ID = "C75eb19ed18cf5a67a1461f785f581e78";
 
     public record BalloonPrice(int buyPrice, int m6, int m8, int m10, int m12) {}
 
     @Override
-    public boolean supports(String serviceName) { return "ผ่อนบอลลูน".equals(serviceName); }
+    public boolean supports(String serviceName) {
+        return "ผ่อนบอลลูน".equals(serviceName);
+    }
 
     @Override
     public String getServiceName() { return "ผ่อนบอลลูน"; }
@@ -55,333 +40,356 @@ public class BalloonFlowService implements ServiceFlowHandler {
         String state = userState.getCurrentState() != null ? userState.getCurrentState() : "STEP_1_INFO";
         String msg = userMessage.trim();
         String userId = userState.getLineUserId();
+        String lastMessage = userState.getLastUserMessage();
 
-        boolean isPanic = msg.contains("แอดมิน") || msg.contains("คุยกับคน") ||
-                msg.contains("อ่านดีๆ") || msg.contains("บอกไปแล้ว") ||
-                msg.contains("บอท") || msg.contains("ไม่รู้เรื่อง") ||
-                msg.contains("อะไรเนี่ย");
-
+        boolean isPanic = msg.matches(".*(แอดมิน|คุยกับคน|อ่านดีๆ|บอกไปแล้ว|บอท|ไม่รู้เรื่อง|อะไรเนี่ย).*");
         if (isPanic) {
-            userState.setPreviousState(state);
+            userState.setPreviousState(state); // จำสเต็ปเดิม
             userState.setCurrentState("ADMIN_MODE");
+            userState.setLastUserMessage(msg);
             userStateRepository.save(userState);
-            lineMessageService.sendEmergencyCard(ADMIN_GROUP_ID, getServiceName(), getCustomerName(userId), "ลูกค้าระบุต้องการคุยกับคน หรือ เกิดความหงุดหงิดบอท");
+            lineMessageService.sendEmergencyCard(ADMIN_GROUP_ID, getServiceName(), "balloon", getCustomerName(userId), userId, "ลูกค้าต้องการคุยกับคน/หงุดหงิดบอท");
             return "รับทราบครับ แอดมินขออภัยในความไม่สะดวกนะครับ 🙏 เดี๋ยวแอดมินตัวจริงรีบเข้ามาดูแลเคสนี้ให้ทันที รบกวนรอสักครู่นะครับ ⏳";
         }
 
+        String responseMessage = null;
+
         switch (state) {
 
-            // ══════════════════════════════════════════════════════════
-            case "STEP_1_INFO": // เริ่มต้น ถามรุ่น
-                // ══════════════════════════════════════════════════════════
-                userState.setCurrentState("STEP_2_PROVINCE");
-                userStateRepository.save(userState);
-                return "สวัสดีครับ 🙏😊 แอดมินขออนุญาตสอบถามรายละเอียดเบื้องต้นครับ\n" +
-                        "👉 ลูกค้าใช้ไอโฟนรุ่นไหน ความจุกี่ GB ครับ?";
+            case "STEP_1_INFO":
+                userState.setCurrentState("STEP_2_CAPACITY");
+                responseMessage = "สวัสดีครับ 🙏😊 ยินดีให้บริการผ่อนบอลลูนครับ ขออนุญาตสอบถามข้อมูลเบื้องต้นนะครับ\n" +
+                        "👉 ลูกค้าใช้ไอโฟน **รุ่นไหน** ครับ? (เช่น 13 Pro Max, 15 Pro, 16)";
+                break;
 
-            // ══════════════════════════════════════════════════════════
-            case "STEP_2_PROVINCE": // ตรวจรุ่น ถามจังหวัด
-                // ══════════════════════════════════════════════════════════
-                log.info("🤖 [ผ่อนบอลลูน] STEP_2 AI สกัดรุ่นจาก: {}", msg);
-                ExtractedData extractedData = aiDataExtractorService.extractInfo(msg, userState.getLastUserMessage());
-                String extractedModel = extractedData.deviceModel();
+            case "STEP_2_CAPACITY":
+                ExtractedData modelData = aiDataExtractorService.extractInfo(msg, lastMessage);
+                String extractedModel = modelData.deviceModel();
 
                 if (extractedModel == null || "unknown".equalsIgnoreCase(extractedModel)) {
-                    return "แอดมินจับชื่อรุ่นไม่ทันเลยครับ 😅 รบกวนขอทราบ 'รุ่นไอโฟน' อีกครั้งชัดๆ ได้ไหมครับ\n" +
-                            "เช่น: 13 Pro Max, 14, หรือ 15 Pro ครับ 📱";
-                }
-
-                userState.setDeviceModel(extractedModel);
-                userState.setCurrentState("STEP_3_AGE");
-                userStateRepository.save(userState);
-                return "รับทราบครับ รุ่น **iPhone " + extractedModel + "** นะครับ! เยี่ยมเลยครับ 😊\n" +
-                        "👉 ลูกค้าอยู่จังหวัดอะไรครับ?";
-
-            // ══════════════════════════════════════════════════════════
-            case "STEP_3_AGE": // รับจังหวัด ถามอายุ
-                // ══════════════════════════════════════════════════════════
-                userState.setCurrentState("STEP_4_REPAIR");
-                userStateRepository.save(userState);
-                return "โอเคครับ 📍\n" +
-                        "👉 แล้วลูกค้าอายุเท่าไหร่ครับ?";
-
-            // ══════════════════════════════════════════════════════════
-            case "STEP_4_REPAIR": // รับอายุ ถามซ่อม
-// ══════════════════════════════════════════════════════════
-                ExtractedData ageData = aiDataExtractorService.extractInfo(msg, userState.getLastUserMessage());
-                Integer extractedAge = ageData.age();
-
-                // 🔴 1. AI จับไม่ได้ → Fallback regex ดึงตัวเลขตรงๆ
-                if (extractedAge == null || extractedAge == 0) {
-                    try {
-                        String numberOnly = msg.replaceAll("[^0-9]", "");
-                        if (!numberOnly.isEmpty()) {
-                            extractedAge = Integer.parseInt(numberOnly);
-                        }
-                    } catch (Exception e) {
-                        log.warn("ไม่สามารถแปลงอายุจากข้อความ: {}", msg);
+                    if (msg.matches("^(1[1-7])(?:\\s*(pro|max|plus|mini|pm|p))?.*$")) {
+                        String baseModel = msg.substring(0, 2);
+                        if (msg.contains("pro max") || msg.contains("pm")) extractedModel = baseModel + " Pro Max";
+                        else if (msg.contains("pro") || msg.contains("p")) extractedModel = baseModel + " Pro";
+                        else if (msg.contains("plus")) extractedModel = baseModel + " Plus";
+                        else if (msg.contains("mini")) extractedModel = baseModel + " mini";
+                        else extractedModel = baseModel;
                     }
                 }
 
-                // 🔴 2. ยังไม่ได้เลย → ถามซ้ำ ไม่เปลี่ยน state
+                if (extractedModel == null || "unknown".equalsIgnoreCase(extractedModel)) {
+                    responseMessage = handleRetryLogic(userState, userId, msg, "บอทสกัดรุ่นโทรศัพท์ไม่ได้", "แอดมินยังไม่ทราบรุ่นเลยครับ 😅 รบกวนแจ้ง 'รุ่นไอโฟน' เช่น 13 Pro Max หรือ 15 Pro อีกครั้งนะครับ 📱");
+                    break;
+                }
+
+                userState.setRetryCount(0);
+                userState.setDeviceModel(extractedModel);
+                userState.setCurrentState("STEP_3_PROVINCE");
+                responseMessage = "รับทราบครับ รุ่น **iPhone " + extractedModel + "** นะครับ! 📱\n" +
+                        "👉 สนใจความจุ **กี่ GB** ครับผม? (เช่น 128, 256, 512)";
+                break;
+
+            case "STEP_3_PROVINCE":
+                ExtractedData capData = aiDataExtractorService.extractInfo(msg, lastMessage);
+                String extractedCapacity = capData.capacity();
+
+                if (extractedCapacity == null || "unknown".equalsIgnoreCase(extractedCapacity)) {
+                    responseMessage = handleRetryLogic(userState, userId, msg, "บอทสกัดความจุไม่ได้", "รบกวนระบุความจุอีกครั้งนะครับ 🙏 เช่น 128GB, 256GB ครับ");
+                    break;
+                }
+
+                userState.setRetryCount(0);
+                userState.setCapacity(extractedCapacity);
+                userState.setCurrentState("STEP_4_AGE");
+                responseMessage = "ความจุ **" + extractedCapacity + "** นะครับ! ✨\n" +
+                        "👉 ลูกค้าอยู่ **จังหวัด** อะไรครับ?";
+                break;
+
+            case "STEP_4_AGE":
+                ExtractedData provData = aiDataExtractorService.extractInfo(msg, lastMessage);
+                String extractedProvince = provData.province();
+
+                if (extractedProvince == null || "unknown".equalsIgnoreCase(extractedProvince)) {
+                    responseMessage = handleRetryLogic(userState, userId, msg, "บอทสกัดชื่อจังหวัดไม่ได้", "รบกวนแจ้งจังหวัดที่ลูกค้าอยู่ให้แอดมินอีกครั้งนะครับ 📍 (เช่น ชลบุรี, กรุงเทพ)");
+                    break;
+                }
+
+                userState.setRetryCount(0);
+                userState.setProvince(extractedProvince);
+                userState.setCurrentState("STEP_5_REPAIR");
+                responseMessage = "จังหวัด " + extractedProvince + " รับทราบครับ 📍\n" +
+                        "👉 แล้วลูกค้า **อายุ** เท่าไหร่ครับ?";
+                break;
+
+            case "STEP_5_REPAIR":
+                ExtractedData ageData = aiDataExtractorService.extractInfo(msg, lastMessage);
+                Integer extractedAge = ageData.age();
+
                 if (extractedAge == null || extractedAge == 0) {
-                    return "แอดมินไม่แน่ใจเรื่องอายุครับ 😅 รบกวนลูกค้าพิมพ์ตัวเลขอายุใหม่อีกครั้งนะครับ\n(เช่น 25, 30)";
+                    try { extractedAge = Integer.parseInt(msg.replaceAll("[^0-9]", "")); } catch (Exception ignored) {}
                 }
 
-                // 🟡 3. อายุต่ำกว่า 18 → แจ้งแอดมิน
+                if (extractedAge == null || extractedAge == 0) {
+                    responseMessage = handleRetryLogic(userState, userId, msg, "บอทสกัดอายุไม่ได้", "รบกวนระบุตัวเลขอายุให้หน่อยนะครับ (เช่น 25)");
+                    break;
+                }
+
                 if (extractedAge < 18) {
+                    userState.setPreviousState("STEP_5_REPAIR");
                     userState.setCurrentState("ADMIN_MODE");
-                    userStateRepository.save(userState);
-                    lineMessageService.sendEmergencyCard(
-                            ADMIN_GROUP_ID,
-                            getServiceName(),
-                            getCustomerName(userId),
-                            "⚠️ ลูกค้าอายุต่ำกว่าเกณฑ์: " + extractedAge + " ปี — แนะนำให้ผู้ปกครองเป็นคนดำเนินการแทน"
-                    );
-                    return "ขอบคุณที่แจ้งนะครับ 🙏\n\n" +
-                            "เกณฑ์อายุที่กำหนดอยู่ที่ **18 - 55 ปี** รบกวนลูกค้ารอแอดมินมาพิจารณาสักครู่นะครับ ⏳";
+                    lineMessageService.sendEmergencyCard(ADMIN_GROUP_ID, getServiceName(), "balloon", getCustomerName(userId), userId, "⚠️ ลูกค้าอายุต่ำกว่าเกณฑ์: " + extractedAge + " ปี");
+                    responseMessage = "ขอบคุณที่แจ้งนะครับ 🙏\n\nเกณฑ์อายุที่กำหนดอยู่ที่ **18 - 55 ปี** รบกวนลูกค้ารอแอดมินมาพิจารณาสักครู่นะครับ ⏳";
+                    break;
                 }
 
-                // 🟡 4. อายุเกิน 55 → แจ้งแอดมินพิจารณา statement
                 if (extractedAge > 55) {
+                    userState.setPreviousState("STEP_5_REPAIR");
                     userState.setCurrentState("ADMIN_MODE");
-                    userStateRepository.save(userState);
-                    lineMessageService.sendEmergencyCard(
-                            ADMIN_GROUP_ID,
-                            getServiceName(),
-                            getCustomerName(userId),
-                            "⚠️ ลูกค้าอายุเกินเกณฑ์: " + extractedAge + " ปี — กรุณาพิจารณาจากงาน / Statement / เงินเดือนของลูกค้าครับ"
-                    );
-                    return "ขอบคุณที่แจ้งนะครับ 🙏\n\n" +
-                            "เกณฑ์อายุที่กำหนดอยู่ที่ **18 - 55 ปี** รบกวนลูกค้ารอแอดมินมาพิจารณาสักครู่นะครับ ⏳";
+                    lineMessageService.sendEmergencyCard(ADMIN_GROUP_ID, getServiceName(), "balloon", getCustomerName(userId), userId, "⚠️ ลูกค้าอายุเกินเกณฑ์: " + extractedAge + " ปี");
+                    responseMessage = "ขอบคุณที่แจ้งนะครับ 🙏\n\nเกณฑ์อายุที่กำหนดอยู่ที่ **18 - 55 ปี** รบกวนลูกค้ารอแอดมินมาพิจารณาสักครู่นะครับ ⏳";
+                    break;
                 }
 
-                // 🟢 5. อายุผ่านเกณฑ์ → ถามประวัติซ่อม
-                userState.setCurrentState("STEP_5_FACEID");
-                userStateRepository.save(userState);
-                return "อายุ " + extractedAge + " ปี รับทราบครับ 🙏\n\n" +
-                        "ถัดไปขออนุญาตเช็คประวัติเครื่องนิดนึงนะครับ 🔍\n" +
+                userState.setRetryCount(0);
+                userState.setCurrentState("STEP_6_FACEID");
+                responseMessage = "อายุ " + extractedAge + " ปี รับทราบครับ 👍\n\n" +
+                        "ถัดไปแอดมินขอเช็คประวัติเครื่องหน่อยครับ 🔍\n" +
                         "👉 เครื่องเคยแกะซ่อม หรือเปลี่ยนชิ้นส่วนใดๆ มาไหมครับ?";
+                break;
 
-            // ══════════════════════════════════════════════════════════
-            case "STEP_5_FACEID": // ตรวจซ่อม ถาม FaceID
-                // ══════════════════════════════════════════════════════════
-                ScreeningAnswer answerRepair = aiScreeningService.interpret(msg, userState.getLastUserMessage());
-                log.info("🛡️ [ผ่อนบอลลูน] STEP_5 เคยแกะซ่อม? → {}", answerRepair);
-
-                if (answerRepair == ScreeningAnswer.YES) {
+            case "STEP_6_FACEID":
+                ScreeningAnswer repairAns = aiScreeningService.interpret(msg, lastMessage);
+                if (repairAns == ScreeningAnswer.YES) {
                     userState.setCurrentState("REJECTED");
-                    userStateRepository.save(userState);
-                    return "ต้องขออภัยด้วยนะครับ 🙏\n" +
-                            "ทางร้านขอสงวนสิทธิ์รับเครื่องที่ผ่านการแกะซ่อมหรือเปลี่ยนชิ้นส่วนครับ\n" +
-                            "หากต้องการสอบถามเพิ่มเติม พิมพ์ 'แอดมิน' ได้เลยนะครับ";
+                    responseMessage = "ต้องขออภัยด้วยนะครับ 🙏 ทางร้านขอสงวนสิทธิ์ไม่รับเครื่องที่ผ่านการแกะซ่อมครับ หากมีข้อสงสัยพิมพ์หาแอดมินได้เลยครับ";
+                    break;
                 }
-                if (answerRepair == ScreeningAnswer.UNCLEAR) {
-                    return "ขออภัยด้วยนะครับ แอดมินยังไม่แน่ใจเลยครับ 😅\n" +
-                            "รบกวนตอบให้ชัดขึ้นได้ไหมครับ เช่น 'ไม่เคยแกะเลยครับ' หรือ 'เคยเปลี่ยนจอครับ'";
+                if (repairAns == ScreeningAnswer.UNCLEAR) {
+                    responseMessage = handleRetryLogic(userState, userId, msg, "ลูกค้าตอบประวัติการซ่อมไม่ชัดเจน", "รบกวนตอบให้ชัดเจนอีกนิดครับ เช่น 'ไม่เคยแกะเลยครับ' หรือ 'เคยเปลี่ยนแบตครับ'");
+                    break;
                 }
 
-                userState.setCurrentState("STEP_6_INSTALLMENT");
-                userStateRepository.save(userState);
-                return "โอเคครับ 👍 แล้ว **Face ID (สแกนหน้า)** ใช้งานได้ปกติไหมครับ?";
+                userState.setRetryCount(0);
+                userState.setCurrentState("STEP_7_INSTALLMENT");
+                responseMessage = "โอเคครับ 👍 แล้ว **Face ID (สแกนหน้า)** ใช้งานได้ปกติไหมครับ?";
+                break;
 
-            // ══════════════════════════════════════════════════════════
-            case "STEP_6_INSTALLMENT": // ตรวจ FaceID ถามติดผ่อน
-                // ══════════════════════════════════════════════════════════
-                ScreeningAnswer answerFaceId = aiScreeningService.interpret(msg, userState.getLastUserMessage());
-                log.info("🛡️ [ผ่อนบอลลูน] STEP_6 Face ID ปกติ? → {}", answerFaceId);
-
-                // NO = ไม่ปกติ (ตกเงื่อนไข)
-                if (answerFaceId == ScreeningAnswer.NO) {
+            case "STEP_7_INSTALLMENT":
+                ScreeningAnswer faceIdAns = aiScreeningService.interpret(msg, lastMessage);
+                if (faceIdAns == ScreeningAnswer.NO) {
                     userState.setCurrentState("REJECTED");
-                    userStateRepository.save(userState);
-                    return "ต้องขออภัยด้วยนะครับ 🙏\n" +
-                            "ทางร้านไม่สามารถรับเครื่องที่ Face ID ใช้งานไม่ได้ครับ\n" +
-                            "หากต้องการสอบถามเพิ่มเติม พิมพ์ 'แอดมิน' ได้เลยนะครับ";
+                    responseMessage = "ต้องขออภัยด้วยนะครับ 🙏 ทางร้านไม่สามารถรับเครื่องที่สแกนหน้าไม่ได้ครับ";
+                    break;
                 }
-                if (answerFaceId == ScreeningAnswer.UNCLEAR) {
-                    return "ขออภัยด้วยนะครับ 😅 รบกวนตอบให้ชัดขึ้นได้ไหมครับ\n" +
-                            "เช่น 'Face ID ใช้ได้ปกติครับ' หรือ 'สแกนหน้าไม่ได้ค่ะ'";
+                if (faceIdAns == ScreeningAnswer.UNCLEAR) {
+                    responseMessage = handleRetryLogic(userState, userId, msg, "ลูกค้าตอบเรื่อง Face ID ไม่ชัดเจน", "รบกวนตอบให้ทราบชัดๆ นิดนึงครับ เช่น 'ปกติครับ' หรือ 'สแกนไม่ได้ค่ะ'");
+                    break;
                 }
 
-                userState.setCurrentState("STEP_7_PHOTOS");
-                userStateRepository.save(userState);
-                return "เยี่ยมเลยครับ 😊 แล้วเครื่องมี **ติดผ่อนกับร้านอื่น หรือติดใส่iCloud ร้านอื่น** ไหมครับ?";
+                userState.setRetryCount(0);
+                userState.setCurrentState("STEP_8_DEVICE_PHOTOS");
+                responseMessage = "เยี่ยมเลยครับ 😊 แล้วเครื่องมี **ติดผ่อนกับร้านอื่น หรือติดใส่ iCloud ร้านอื่น** ไหมครับ?";
+                break;
 
-            // ... (ส่วน Import และหัว Class เหมือนเดิม)
-
-            // ══════════════════════════════════════════════════════════
-            case "STEP_7_DEVICE_PHOTOS": // ตรวจติดผ่อน เสร็จแล้วขอรูปรอบเครื่องก่อน
-                // ══════════════════════════════════════════════════════════
-                ScreeningAnswer answerInstallment = aiScreeningService.interpret(msg, userState.getLastUserMessage());
-                log.info("🛡️ [ผ่อนบอลลูน] STEP_7 ติดผ่อน/iCloud? → {}", answerInstallment);
-
-                if (answerInstallment == ScreeningAnswer.YES) {
+            case "STEP_8_DEVICE_PHOTOS":
+                ScreeningAnswer installAns = aiScreeningService.interpret(msg, lastMessage);
+                if (installAns == ScreeningAnswer.YES) {
                     userState.setCurrentState("REJECTED");
-                    userStateRepository.save(userState);
-                    return "ต้องขออภัยด้วยนะครับ 🙏\n" +
-                            "ทางร้านไม่สามารถรับเครื่องที่ติดผ่อนหรือมีการล็อค iCloud ครับ";
+                    responseMessage = "ต้องขออภัยครับ 🙏 แอดมินไม่สามารถรับเครื่องที่ยังติดภาระผ่อนหรือล็อค iCloud ครับ";
+                    break;
                 }
-                if (answerInstallment == ScreeningAnswer.UNCLEAR) {
-                    return "ขออภัยด้วยนะครับ 😅 รบกวนตอบให้ชัดขึ้นได้ไหมครับ เช่น 'ไม่ติดผ่อนค่ะ'";
+                if (installAns == ScreeningAnswer.UNCLEAR) {
+                    responseMessage = handleRetryLogic(userState, userId, msg, "ลูกค้าตอบเรื่องติดผ่อนไม่ชัดเจน", "รบกวนยืนยันใหม่อีกครั้งครับ เช่น 'ไม่ติดผ่อนครับ' หรือ 'เครื่องเปล่าครับ'");
+                    break;
                 }
 
-                // ✅ ผ่านการคัดกรอง -> ขอรูปรอบเครื่องก่อน
-                userState.setCurrentState("STEP_8_SETTINGS_PHOTO");
-                userStateRepository.save(userState);
-                return "ผ่านการตรวจสอบเบื้องต้นเรียบร้อยครับ 🎉✅\n\n" +
+                userState.setRetryCount(0);
+                userState.setCurrentState("STEP_9_SETTINGS_PHOTO");
+                responseMessage = "ผ่านการตรวจสอบเบื้องต้นเรียบร้อยครับ 🎉✅\n\n" +
                         "เพื่อให้แอดมินประเมินสภาพภายนอกได้ชัดเจน รบกวนลูกค้า:\n" +
-                        "📸 **ถ่ายรูปรอบเครื่อง 4-5 รูป** (ด้านหน้า ด้านหลัง และขอบข้าง)\n" +
-                        "ส่งมาในแชทนี้ได้เลยครับ (สามารถถ่ายผ่านกระจกเงาได้ครับ)";
+                        "📸 **ถ่ายรูปรอบเครื่อง 4-5 รูป** (หน้า-หลัง-ข้าง)\n" +
+                        "ส่งมาให้ดูสภาพหน่อยครับ (สามารถถ่ายผ่านกระจกเงาได้ครับ🪞)✨";
+                break;
 
-            // ══════════════════════════════════════════════════════════
-            case "STEP_8_SETTINGS_PHOTO": // รับรูปรอบเครื่อง -> แล้วขอรูปหน้าตั้งค่า (พร้อมตัวอย่าง)
-                // ══════════════════════════════════════════════════════════
-                // หมายเหตุ: ใน Logic จริง คุณอาจต้องเช็คว่า User ส่ง Image มาจริงๆ หรือไม่ใน Webhook
-                // แต่ใน Flow นี้เราจะข้ามไป Step ถัดไปเมื่อมีการโต้ตอบ
+            case "STEP_9_SETTINGS_PHOTO":
+                if (msg.equals("[รูปภาพ]")) {
+                    return "ได้รับรูปแล้วครับ 📸 ทยอยส่งมาให้ครบ 4-5 รูปได้เลยนะครับ\n" +
+                            "(หากส่งครบแล้ว รบกวนพิมพ์บอกแอดมินว่า **'ครบแล้ว'** ด้วยนะครับ ✨)";
+                }
 
-                userState.setCurrentState("STEP_9_NAME");
+                boolean isImageBatchReceived = msg.contains("ครบ") || msg.contains("ส่งแล้ว") || msg.contains("เรียบร้อย");
+
+                if (!isImageBatchReceived) {
+                    return handleRetryLogic(userState, userId, msg, "ลูกค้าพิมพ์ข้อความอื่นแทนที่จะส่งรูปครบแล้ว", "กำลังรอรูปรอบเครื่องอยู่นะครับ 📸\n(หากส่งรูปครบแล้ว พิมพ์บอกแอดมินว่า **'ครบแล้ว'** ได้เลยครับ ✨)");
+                }
+
+                userState.setRetryCount(0);
+                userState.setCurrentState("ADMIN_PHOTO_CHECK");
+                userState.setLastUserMessage(msg);
                 userStateRepository.save(userState);
-
-                String exampleImageUrl = "https://raw.githubusercontent.com/fourwheel2005/image/main/S__8298515.jpg"; // ใส่ URL รูปตัวอย่างของคุณ
-                lineMessageService.sendImage(userId, exampleImageUrl);
-
-                // 2. ส่งข้อความยิงคำขอรูปภาพ
-                return "ได้รับรูปรอบเครื่องเรียบร้อยครับ สวยมากครับ! ✨\n\n" +
-                        "ถัดไป รบกวนลูกค้า **แคปหน้าจอ 'การตั้งค่า > ทั่วไป > เกี่ยวกับ'**\n" +
-                        "ส่งมาให้แอดมินดูรุ่นและความจุที่แน่นอนหน่อยครับ\n" +
-                        "(ตามรูปตัวอย่างที่แอดมินส่งให้ด้านบนเลยครับ ☝️)";
-
-            // ══════════════════════════════════════════════════════════
-            case "STEP_9_NAME": // รับรูปหน้าตั้งค่า -> แล้วขอชื่อ
-                // ══════════════════════════════════════════════════════════
-                userState.setCurrentState("STEP_10_SUBMIT_DATA");
-                userStateRepository.save(userState);
-                return "ได้รับข้อมูลเครื่องครบถ้วนครับ 📸📱\n\n" +
-                        "👉 ขั้นตอนสุดท้าย รบกวนลูกค้าพิมพ์ **ชื่อ-นามสกุล** ส่งมาให้แอดมินเพื่อใช้ในการประเมินเครดิตด้วยครับ ✍️";
-
-            // ══════════════════════════════════════════════════════════
-            case "STEP_10_SUBMIT_DATA": // รับชื่อ -> ส่งข้อมูลให้ Admin
-                // ══════════════════════════════════════════════════════════
-                userState.setCurrentState("ADMIN_MODE");
-                userState.setFullName(msg);
-                userStateRepository.save(userState);
-
-                String customerRealName = msg;
-                String displayLineName = getCustomerName(userId);
 
                 lineMessageService.sendAdminApprovalCard(
                         ADMIN_GROUP_ID,
-                        "ผ่อนบอลลูน",
+                        getServiceName(),
                         "balloon",
-                        customerRealName + " (LINE: " + displayLineName + ")",
+                        getCustomerName(userId),
                         userId,
-                        userState.getDeviceModel() != null ? "รุ่น: " + userState.getDeviceModel() : "รอประเมิน"
+                        "รุ่น: " + userState.getDeviceModel() + " " + userState.getCapacity() + "\n(แอดมินโปรดตรวจรูปรอบเครื่อง 4-5 รูป)"
                 );
 
-                return "ได้รับข้อมูลครบถ้วนครับ 📝 แอดมินกำลังตรวจสอบสภาพเครื่องและประวัติเครดิตอย่างละเอียด รบกวนรอสักครู่นะครับ ⏳";
-// ...
+                return "ได้รับรูปรอบเครื่องเรียบร้อยครับ 📸 แอดมินขอเวลาตรวจสอบสภาพภายนอกสักครู่นะครับ รบกวนรอสักครู่ครับ ⏳";
 
-            // ══════════════════════════════════════════════════════════
-            case "STEP_5_PRICING":
-                // ══════════════════════════════════════════════════════════
-            {
-                userState.setCurrentState("STEP_6_MONTH_SELECTION");
+            case "STEP_9_APPROVED_PHOTO":
+                userState.setCurrentState("STEP_10_NAME");
                 userStateRepository.save(userState);
+                String exampleImageUrl = "https://raw.githubusercontent.com/fourwheel2005/image/main/S__8298515.jpg";
+                lineMessageService.sendImage(userId, exampleImageUrl);
 
-                String savedModel = userState.getDeviceModel();
-                BalloonPrice price = getPriceForModel(savedModel);
+                return "ตรวจสอบรูปรอบเครื่องผ่านเรียบร้อยครับ สวยมากครับ! ✨\n\n" +
+                        "ถัดไป รบกวนลูกค้า **แคปหน้าจอ 'การตั้งค่า > ทั่วไป > เกี่ยวกับ'**\n" +
+                        "ส่งมาให้ดูรุ่นและความจุที่แน่นอนหน่อยครับ\n" +
+                        "(ตามรูปตัวอย่างที่แอดมินส่งให้ด้านบนเลยครับ ☝️)";
 
-                if (price == null) {
-                    userState.setCurrentState("ADMIN_MODE");
-                    userStateRepository.save(userState);
-                    return "สำหรับรุ่นนี้ รบกวนรอแอดมินเข้ามาประเมินราคาพิเศษให้นะครับ ⏳";
+            case "STEP_10_NAME":
+                if (!msg.equals("[รูปภาพ]")) {
+                    return handleRetryLogic(userState, userId, msg, "ลูกค้าไม่ยอมส่งรูปหน้าตั้งค่า", "กำลังรอรูปแคปหน้าจอตั้งค่าอยู่นะครับ 📸 รบกวนลูกค้าส่งเป็นรูปภาพเข้ามาให้หน่อยนะครับ 🙏");
                 }
 
-                return "ตรวจสอบผ่านเรียบร้อยครับ! 🎉 แอดมินขอเสนอโปรโมชั่นสำหรับ **iPhone " + savedModel + "** นะครับ\n\n" +
-                        "**โปรโมชั่นบอลลูนรายเดือน:**\n" +
-                        "- ยอดรับซื้อ: " + String.format("%,d", price.buyPrice()) + " บาท\n" +
-                        "- ส่ง 6 เดือน: งวดละ " + String.format("%,d", price.m6()) + " บาท\n" +
-                        "- ส่ง 8 เดือน: งวดละ " + String.format("%,d", price.m8()) + " บาท\n" +
-                        "- ส่ง 10 เดือน: งวดละ " + String.format("%,d", price.m10()) + " บาท\n" +
-                        "- ส่ง 12 เดือน: งวดละ " + String.format("%,d", price.m12()) + " บาท\n\n" +
-                        "👉 ลูกค้าสนใจรับเป็นระยะเวลา **6, 8, 10 หรือ 12 เดือน** ดีครับ?";
-            }
+                userState.setRetryCount(0);
+                userState.setCurrentState("STEP_11_SUBMIT_DATA");
+                responseMessage = "ได้รับข้อมูลครบถ้วนครับ 📸📱\n\n" +
+                        "👉 ขั้นตอนสุดท้าย รบกวนลูกค้าพิมพ์ **ชื่อ-นามสกุล** ส่งมาเพื่อใช้ในการประเมินเครดิตด้วยครับ ✍️";
+                break;
 
-            // ══════════════════════════════════════════════════════════
-            case "STEP_6_MONTH_SELECTION":
-                // ══════════════════════════════════════════════════════════
-            {
-                boolean isValidMonth = msg.contains("6") || msg.contains("8") || msg.contains("10") || msg.contains("12")
-                        || msg.contains("หก") || msg.contains("แปด") || msg.contains("สิบ") || msg.contains("สิบสอง");
-
-                if (!isValidMonth) {
-                    return "ลูกค้าสะดวกส่งงวดละกี่เดือนดีครับ? 😊\n" +
-                            "มีให้เลือก: **6, 8, 10 หรือ 12 เดือน** ครับ พิมพ์ตัวเลขบอกแอดมินได้เลยครับ";
-                }
-
+            case "STEP_11_SUBMIT_DATA":
+                userState.setPreviousState("STEP_11_SUBMIT_DATA");
                 userState.setCurrentState("ADMIN_MODE");
-                userStateRepository.save(userState);
-
-                lineMessageService.sendEmergencyCard(
-                        ADMIN_GROUP_ID, "ผ่อนบอลลูน", getCustomerName(userId), "ลูกค้าเลือก " + msg + " เดือน รอสรุปยอดโอนและเอกสาร"
+                userState.setFullName(msg);
+                lineMessageService.sendAdminApprovalCard(
+                        ADMIN_GROUP_ID, getServiceName(), "balloon",
+                        msg + " (LINE: " + getCustomerName(userId) + ")",
+                        userId,
+                        "รุ่น: " + userState.getDeviceModel() + " " + userState.getCapacity()
                 );
+                responseMessage = "ได้รับข้อมูลครบถ้วนครับ 📝 แอดมินตรวจสอบราคาประเมินและเครดิตให้แล้วครับ รบกวนรอสักครู่นะครับ ⏳";
+                break;
 
-                return "รับทราบครับ! แอดมินได้รับข้อมูลแล้ว 📝\n" +
-                        "เดี๋ยวแอดมินตัวจริงจะเข้ามาสรุปยอด แจ้งเงื่อนไข และขอเอกสารทำสัญญาให้นะครับ รบกวนรอสักครู่ครับ ⏳";
-            }
+            case "STEP_5_PRICING":
+                userState.setCurrentState("STEP_6_MONTH_SELECTION");
+                BalloonPrice price = getPriceForModel(userState.getDeviceModel());
+                if (price == null) {
+                    responseMessage = "สำหรับรุ่นนี้ รบกวนรอแอดมินเข้ามาเสนอราคาพิเศษให้นะครับ ⏳";
+                    break;
+                }
+                responseMessage = "ข้อเสนอสำหรับ **iPhone " + userState.getDeviceModel() + "** มาแล้วครับ! 🎉\n" +
+                        "- ยอดรับซื้อ: " + String.format("%,d", price.buyPrice()) + " บ.\n" +
+                        "- 6 เดือน: งวดละ " + String.format("%,d", price.m6()) + " บ.\n" +
+                        "- 8 เดือน: งวดละ " + String.format("%,d", price.m8()) + " บ.\n" +
+                        "- 10 เดือน: งวดละ " + String.format("%,d", price.m10()) + " บ.\n" +
+                        "- 12 เดือน: งวดละ " + String.format("%,d", price.m12()) + " บ.\n\n" +
+                        "👉 ลูกค้าสนใจส่งกี่เดือนดีครับ? (พิมพ์ตัวเลข 6, 8, 10 หรือ 12 ได้เลยครับ)";
+                break;
 
-            // ══════════════════════════════════════════════════════════
+            case "STEP_6_MONTH_SELECTION":
+                boolean isValidMonth = msg.matches(".*(6|8|10|12|หก|แปด|สิบ).*");
+                if (!isValidMonth) {
+                    responseMessage = handleRetryLogic(userState, userId, msg, "ลูกค้าเลือกระยะเวลาผ่อนผิด", "ลูกค้าสะดวกส่งงวดละกี่เดือนดีครับ? 😊\nมีให้เลือก: **6, 8, 10 หรือ 12 เดือน** ครับ");
+                    break;
+                }
+
+                userState.setRetryCount(0);
+                userState.setCurrentState("ADMIN_MODE");
+                lineMessageService.sendSuccessCard(
+                        ADMIN_GROUP_ID,
+                        getServiceName(),
+                        "balloon",
+                        getCustomerName(userId),
+                        userId,
+                        "ลูกค้าเลือกระยะเวลา: " + msg + " เดือน"
+                );
+                responseMessage = "รับทราบครับ! ได้รับข้อมูลแล้ว 📝\nเดี๋ยวแอดมินจะเข้ามาสรุปยอด แจ้งเงื่อนไข และขอเอกสารทำสัญญาให้นะครับ รบกวนรอสักครู่ครับ ⏳";
+                break;
+
             case "ADMIN_MODE":
+            case "ADMIN_PHOTO_CHECK":
             case "REJECTED":
-                // ══════════════════════════════════════════════════════════
-                return null; // บอทเงียบ
+                responseMessage = null;
+                break;
 
             default:
                 userState.setCurrentState("STEP_1_INFO");
-                userStateRepository.save(userState);
-                return "ระบบเริ่มการทำรายการใหม่ครับ กรุณาพิมพ์คำว่า 'ผ่อนบอลลูน' เพื่อเริ่มดำเนินการครับ";
+                responseMessage = "ระบบเริ่มการทำรายการใหม่ครับ กรุณาพิมพ์คำว่า 'ผ่อนบอลลูน' เพื่อเริ่มดำเนินการครับ";
+                break;
         }
+
+        if (responseMessage != null) {
+            userState.setLastUserMessage(msg);
+        }
+        userStateRepository.save(userState);
+
+        return responseMessage;
+    }
+
+    // ==========================================
+    // 🛠️ Helper Method: ระบบจัดการคนพิมพ์มั่ว (Retry Logic)
+    // ==========================================
+    private String handleRetryLogic(UserState userState, String userId, String msg, String adminAlertReason, String retryPrompt) {
+        int currentRetry = userState.getRetryCount() != null ? userState.getRetryCount() : 0;
+        currentRetry++;
+
+        if (currentRetry >= 2) {
+            userState.setPreviousState(userState.getCurrentState()); // จำสเต็ปเดิม
+            userState.setCurrentState("ADMIN_MODE");
+            userState.setRetryCount(0);
+            userStateRepository.save(userState);
+
+            lineMessageService.sendEmergencyCard(
+                    ADMIN_GROUP_ID,
+                    getServiceName(),
+                    "balloon",
+                    getCustomerName(userId),
+                    userId,
+                    adminAlertReason + " เกิน 2 ครั้ง (ข้อความล่าสุด: " + msg + ")"
+            );
+
+            return "ดูเหมือนจะยังไม่เข้าใจข้อมูลส่วนนี้ 😅 เพื่อความรวดเร็ว ขอตามแอดมินตัวจริงมาช่วยดูแลเคสนี้ให้นะครับ รบกวนรอสักครู่ครับ ⏳";
+        }
+
+        userState.setRetryCount(currentRetry);
+        return retryPrompt;
     }
 
     private String getCustomerName(String userId) {
-        try {
-            var profile = messagingApiClient.getProfile(userId).get();
-            return profile.body().displayName();
-        } catch (Exception e) {
-            log.warn("❌ ไม่สามารถดึงชื่อโปรไฟล์ของ userId: {} ได้", userId);
-            return "ลูกค้า (ไม่ทราบชื่อ)";
-        }
+        try { return messagingApiClient.getProfile(userId).get().body().displayName(); } catch (Exception e) { return "ลูกค้า"; }
     }
 
     private BalloonPrice getPriceForModel(String modelName) {
         if (modelName == null || modelName.trim().isEmpty()) return null;
-        String normalizedModel = modelName.toLowerCase().replace("iphone ", "").trim();
-        return switch (normalizedModel) {
-            case "12 mini"    -> new BalloonPrice(3500,  1190,  890,  790,  690);
-            case "12"         -> new BalloonPrice(4000,  1290, 1090,  890,  790);
-            case "12 pro"     -> new BalloonPrice(4500,  1490, 1190,  990,  890);
-            case "12 pro max" -> new BalloonPrice(5000,  1590, 1290, 1090,  990);
-            case "13 mini"    -> new BalloonPrice(4500,  1490, 1190,  990,  890);
-            case "13"         -> new BalloonPrice(6000,  1990, 1590, 1290, 1190);
+        String m = modelName.toLowerCase().replace("iphone ", "").trim();
+        return switch (m) {
+            case "12"         -> new BalloonPrice(3500,  1190,  890,  790,  690);
+            case "12 pro"     -> new BalloonPrice(4000,  1290, 1090,  890,  790);
+            case "12 pro max" -> new BalloonPrice(4000,  1290, 1090,  890,  790);
+            case "13 mini"    -> new BalloonPrice(3500,  1190,  890,  790,  690);
+            case "13"         -> new BalloonPrice(5000,  1590, 1290, 1090,  990);
             case "13 pro"     -> new BalloonPrice(7000,  2290, 1790, 1590, 1390);
             case "13 pro max" -> new BalloonPrice(9000,  2890, 2290, 1990, 1790);
-            case "14"         -> new BalloonPrice(8000,  2550, 2050, 1750, 1550);
-            case "14 plus"    -> new BalloonPrice(9000,  2850, 2250, 1950, 1750);
-            case "14 pro"     -> new BalloonPrice(11000, 3550, 2750, 2350, 2150);
-            case "14 pro max" -> new BalloonPrice(12000, 3850, 3050, 2550, 2350);
-            case "15"         -> new BalloonPrice(11000, 3550, 2750, 2390, 2150);
-            case "15 plus"    -> new BalloonPrice(12000, 3850, 3050, 2550, 2350);
-            case "15 pro"     -> new BalloonPrice(13000, 4190, 3290, 2790, 2490);
-            case "15 pro max" -> new BalloonPrice(15000, 4790, 3790, 3290, 2890);
-            case "16e"        -> new BalloonPrice(10000, 3190, 2590, 2190, 1990);
-            case "16"         -> new BalloonPrice(13000, 4190, 3290, 2790, 2490);
-            case "16 plus"    -> new BalloonPrice(15000, 4790, 3750, 3290, 2890);
-            case "16 pro"     -> new BalloonPrice(17000, 5390, 4290, 3690, 3290);
-            case "16 pro max" -> new BalloonPrice(20000, 6390, 4990, 4290, 3890);
+            case "14"         -> new BalloonPrice(7000,  2290, 1790, 1590, 1390);
+            case "14 plus"    -> new BalloonPrice(9000,  2890, 2290, 1990, 1790);
+            case "14 pro"     -> new BalloonPrice(9000,  2890, 2290, 1990, 1790);
+            case "14 pro max" -> new BalloonPrice(11000, 3550, 2750, 2350, 2150);
+            case "15"         -> new BalloonPrice(10000, 3190, 2590, 2190, 1990);
+            case "15 plus"    -> new BalloonPrice(11000, 3550, 2750, 2350, 2150);
+            case "15 pro"     -> new BalloonPrice(12000, 3850, 3050, 2550, 2350);
+            case "15 pro max" -> new BalloonPrice(13000, 4190, 3290, 2790, 2490);
+            case "16e"        -> new BalloonPrice(8000,  2550, 2050, 1750, 1550);
+            case "16"         -> new BalloonPrice(11000, 3550, 2750, 2350, 2150);
+            case "16 plus"    -> new BalloonPrice(13000, 4190, 3290, 2790, 2490);
+            case "16 pro"     -> new BalloonPrice(15000, 4790, 3790, 3290, 2890);
+            case "16 pro max" -> new BalloonPrice(18000, 5690, 4590, 3990, 3490);
             case "17"         -> new BalloonPrice(16000, 5090, 3990, 3490, 3090);
-            case "17 air"     -> new BalloonPrice(20000, 6390, 4990, 4390, 3890);
-            case "17 pro"     -> new BalloonPrice(22000, 6990, 5490, 4790, 4290);
+            case "17 air"     -> new BalloonPrice(15000, 4790, 3790, 3290, 2890);
+            case "17 pro"     -> new BalloonPrice(21000, 6690, 5290, 4620, 4190);
             case "17 pro max" -> new BalloonPrice(25000, 7990, 6290, 5390, 4790);
             default -> null;
         };

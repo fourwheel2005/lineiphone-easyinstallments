@@ -41,6 +41,12 @@ public class UserState {
     @Column(name = "capacity")
     private String capacity;
 
+    @Column(name = "retry_count")
+    private Integer retryCount = 0; // กำหนดค่าเริ่มต้นเป็น 0
+
+    @Column(name = "province")
+    private String province;
+
     @Column(name = "battery_health")
     private Integer batteryHealth;
 
