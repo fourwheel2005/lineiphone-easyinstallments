@@ -261,6 +261,8 @@ public class LineWebhookController {
 
             if (targetUserId == null || action == null) return;
 
+            String customerName = getCustomerName(targetUserId);
+
             String adminReplyMessage = "";
             String messageToCustomer = null;
 
@@ -269,7 +271,8 @@ public class LineWebhookController {
             state.setLineUserId(targetUserId);
 
             if (action.equals("approve") || action.equals("approve_doc") || action.equals("approve_credit")) {
-                adminReplyMessage = "✅ เคสของลูกค้าอนุมัติผ่านเรียบร้อย! ระบบแจ้งลูกค้าแล้วครับ";
+                // 👇 เพิ่มชื่อลูกค้าตรงนี้
+                adminReplyMessage = "✅ เคสของลูกค้า (" + customerName + ") อนุมัติผ่านเรียบร้อย! ระบบแจ้งลูกค้าแล้วครับ";
                 messageToCustomer = "🎉 ยินดีด้วยครับ! ข้อมูลของคุณได้รับการอนุมัติเรียบร้อยแล้ว แอดมินจะรีบดำเนินการขั้นตอนต่อไปให้นะครับ";
 
                 if ("balloon".equals(serviceName)) {
@@ -282,26 +285,29 @@ public class LineWebhookController {
                     }
                 }
             } else if (action.equals("reject") || action.equals("reject_credit")) {
-                adminReplyMessage = "❌ เคสนี้ถูกปฏิเสธเรียบร้อยครับ";
+                // 👇 เพิ่มชื่อลูกค้าตรงนี้
+                adminReplyMessage = "❌ เคสนี้ถูกปฏิเสธเรียบร้อยครับ (ลูกค้า: " + customerName + ")";
                 messageToCustomer = "ต้องขออภัยด้วยนะครับ 🙏 จากการตรวจสอบข้อมูล ยังไม่ผ่านเกณฑ์การพิจารณาในครั้งนี้ครับ หากมีข้อสงสัยสามารถพิมพ์สอบถามแอดมินได้เลยครับ";
 
                 // ==========================================
                 // 🚨 โหมดจัดการบอท: ปิด/เปิด AI ด้วยปุ่มของแอดมิน
                 // ==========================================
             } else if (action.equals("take_case")) {
-                adminReplyMessage = "💬 รับเรื่องแล้ว! (ปิดบอทชั่วคราว) คุยกับลูกค้าต่อใน LINE OA ได้เลยครับ";
+                // 👇 เพิ่มชื่อลูกค้าตรงนี้
+                adminReplyMessage = "💬 รับเรื่องแล้ว! (ปิดบอทชั่วคราว) คุยกับลูกค้า (" + customerName + ") ต่อใน LINE OA ได้เลยครับ";
                 messageToCustomer = "แอดมินตัวจริงมารับเรื่องแล้วครับ! พิมพ์สอบถามได้เลยครับ 👇";
 
                 state.setCurrentState("ADMIN_MODE");
                 userStateRepository.save(state);
 
             } else if (action.equals("resume_bot")) {
-                adminReplyMessage = "▶️ เปิดบอทให้ดูแลลูกค้าคนนี้ต่อแล้วครับ";
+                // 👇 เพิ่มชื่อลูกค้าตรงนี้
+                adminReplyMessage = "▶️ เปิดบอทให้ดูแลลูกค้า (" + customerName + ") ต่อแล้วครับ";
                 messageToCustomer = "บอทผู้ช่วย DDMobile กลับมาดูแลต่อแล้วครับ! มีอะไรให้ช่วยกดเมนูด้านล่างได้เลยครับ ✨";
 
                 // 🟢 สั่งเปิดบอท! ล้าง State ทิ้งให้กลับไปเป็นปกติ
                 state.setCurrentState(null);
-                state.setLineUserId(null);
+                state.setLineUserId(null); // หมายเหตุ: การตั้งค่า lineUserId เป็น null ตรงนี้อาจมีผลข้างเคียง (อิงตามโค้ดเดิมของคุณ)
                 userStateRepository.save(state);
             }
 
@@ -342,6 +348,18 @@ public class LineWebhookController {
             }
         }
         return map;
+    }
+
+    // ==========================================
+    // 🛠️ Helper Method: ดึงชื่อลูกค้าจาก LINE API
+    // ==========================================
+    private String getCustomerName(String userId) {
+        try {
+            return messagingApiClient.getProfile(userId).get().body().displayName();
+        } catch (Exception e) {
+            log.error("ดึงชื่อลูกค้าไม่ได้: ", e);
+            return "ลูกค้า"; // ถ้าดึงไม่สำเร็จ หรือเกิด Error ให้ใช้คำว่า "ลูกค้า" แทน
+        }
     }
 
 

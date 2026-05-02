@@ -96,7 +96,7 @@
           "type": "postback",
           "label": "✅ เครดิตผ่าน",
           "data": "action=approve_credit&service={{SERVICE_EN}}&userId={{USER_ID}}",
-          "displayText": "แอดมินกด: เครดิตผ่าน"
+          "displayText": "แอดมินกด: เครดิตผ่าน (ลูกค้า: {{CUSTOMER_NAME}})"
         },
         "color": "#00B900"
       },
@@ -108,7 +108,7 @@
           "type": "postback",
           "label": "❌ ติดแบล็คลิสต์",
           "data": "action=reject_credit&service={{SERVICE_EN}}&userId={{USER_ID}}",
-          "displayText": "แอดมินกด: ติดแบล็คลิสต์"
+          "displayText": "แอดมินกด: ติดแบล็คลิสต์ (ลูกค้า: {{CUSTOMER_NAME}})"
         },
         "color": "#F0F0F0"
       }
