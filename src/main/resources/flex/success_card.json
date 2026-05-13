@@ -1,0 +1,142 @@
+{
+  "type": "bubble",
+  "size": "kilo",
+  "header": {
+    "type": "box",
+    "layout": "vertical",
+    "contents": [
+      {
+        "type": "box",
+        "layout": "horizontal",
+        "contents": [
+          {
+            "type": "text",
+            "text": "🎉 ปิดการขาย (บอท)",
+            "weight": "bold",
+            "color": "#FFFFFF",
+            "size": "md"
+          }
+        ]
+      }
+    ],
+    "backgroundColor": "#00B900",
+    "paddingTop": "15px",
+    "paddingBottom": "15px",
+    "paddingStart": "20px",
+    "paddingEnd": "20px"
+  },
+  "body": {
+    "type": "box",
+    "layout": "vertical",
+    "contents": [
+      {
+        "type": "text",
+        "text": "ลูกค้ายืนยันข้อมูลเรียบร้อย",
+        "weight": "bold",
+        "size": "md",
+        "color": "#111111",
+        "margin": "sm"
+      },
+      {
+        "type": "separator",
+        "margin": "lg"
+      },
+      {
+        "type": "box",
+        "layout": "vertical",
+        "margin": "lg",
+        "spacing": "sm",
+        "contents": [
+          {
+            "type": "box",
+            "layout": "baseline",
+            "spacing": "sm",
+            "contents": [
+              {
+                "type": "text",
+                "text": "บริการ",
+                "color": "#aaaaaa",
+                "size": "sm",
+                "flex": 2
+              },
+              {
+                "type": "text",
+                "text": "{{SERVICE_NAME}}",
+                "wrap": true,
+                "color": "#666666",
+                "size": "sm",
+                "flex": 5,
+                "weight": "bold"
+              }
+            ]
+          },
+          {
+            "type": "box",
+            "layout": "baseline",
+            "spacing": "sm",
+            "contents": [
+              {
+                "type": "text",
+                "text": "ลูกค้า",
+                "color": "#aaaaaa",
+                "size": "sm",
+                "flex": 2
+              },
+              {
+                "type": "text",
+                "text": "{{CUSTOMER_NAME}}",
+                "wrap": true,
+                "color": "#666666",
+                "size": "sm",
+                "flex": 5,
+                "weight": "bold"
+              }
+            ]
+          },
+          {
+            "type": "box",
+            "layout": "baseline",
+            "spacing": "sm",
+            "contents": [
+              {
+                "type": "text",
+                "text": "ข้อมูล",
+                "color": "#aaaaaa",
+                "size": "sm",
+                "flex": 2
+              },
+              {
+                "type": "text",
+                "text": "{{EXTRA_INFO}}",
+                "wrap": true,
+                "color": "#00B900",
+                "size": "sm",
+                "flex": 5,
+                "weight": "bold"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "footer": {
+    "type": "box",
+    "layout": "vertical",
+    "spacing": "sm",
+    "contents": [
+      {
+        "type": "button",
+        "style": "primary",
+        "color": "#00B900",
+        "action": {
+          "type": "postback",
+          "label": "💬 ทักแชททำสัญญา",
+          "data": "action=take_case&service={{SERVICE_EN}}&userId={{USER_ID}}",
+          "displayText": "แอดมินกด: เข้าดูแลเคส (ลูกค้า: {{CUSTOMER_NAME}})"
+        }
+      }
+    ],
+    "flex": 0
+  }
+}
