@@ -1,0 +1,155 @@
+{
+  "type": "bubble",
+  "size": "mega",
+  "header": {
+    "type": "box",
+    "layout": "vertical",
+    "contents": [
+      {
+        "type": "text",
+        "text": "🙏 ยินดีต้อนรับ",
+        "weight": "bold",
+        "size": "xl",
+        "color": "#ffffff",
+        "align": "center"
+      },
+      {
+        "type": "text",
+        "text": "ร้านทันใจ Easy Installments",
+        "size": "sm",
+        "color": "#ffffffcc",
+        "align": "center"
+      }
+    ],
+    "backgroundColor": "#1DB954",
+    "paddingAll": "20px"
+  },
+  "body": {
+    "type": "box",
+    "layout": "vertical",
+    "contents": [
+      {
+        "type": "text",
+        "text": "สวัสดีครับคุณลูกค้า 😊",
+        "weight": "bold",
+        "size": "lg",
+        "wrap": true,
+        "align": "center",
+        "margin": "md"
+      },
+      {
+        "type": "text",
+        "text": "เราพร้อมให้บริการผ่อนชำระสินค้าไอโฟนและอุปกรณ์ Apple ให้กับคุณ",
+        "size": "sm",
+        "color": "#555555",
+        "wrap": true,
+        "align": "center",
+        "margin": "md"
+      },
+      {
+        "type": "separator",
+        "margin": "xl"
+      },
+      {
+        "type": "box",
+        "layout": "vertical",
+        "margin": "xl",
+        "spacing": "sm",
+        "contents": [
+          {
+            "type": "box",
+            "layout": "baseline",
+            "spacing": "sm",
+            "contents": [
+              {
+                "type": "text",
+                "text": "✅",
+                "size": "sm",
+                "flex": 1
+              },
+              {
+                "type": "text",
+                "text": "ผ่อนง่าย อนุมัติไว",
+                "size": "sm",
+                "color": "#333333",
+                "flex": 5,
+                "wrap": true
+              }
+            ]
+          },
+          {
+            "type": "box",
+            "layout": "baseline",
+            "spacing": "sm",
+            "contents": [
+              {
+                "type": "text",
+                "text": "✅",
+                "size": "sm",
+                "flex": 1
+              },
+              {
+                "type": "text",
+                "text": "ไม่ต้องมีประวัติเครดิต",
+                "size": "sm",
+                "color": "#333333",
+                "flex": 5,
+                "wrap": true
+              }
+            ]
+          },
+          {
+            "type": "box",
+            "layout": "baseline",
+            "spacing": "sm",
+            "contents": [
+              {
+                "type": "text",
+                "text": "✅",
+                "size": "sm",
+                "flex": 1
+              },
+              {
+                "type": "text",
+                "text": "รับของได้เลยวันนี้",
+                "size": "sm",
+                "color": "#333333",
+                "flex": 5,
+                "wrap": true
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "footer": {
+    "type": "box",
+    "layout": "vertical",
+    "spacing": "sm",
+    "contents": [
+      {
+        "type": "button",
+        "style": "primary",
+        "color": "#1DB954",
+        "action": {
+          "type": "message",
+          "label": "📱 สนใจผ่อนสินค้า",
+          "text": "สนใจผ่อน"
+        },
+        "height": "sm"
+      },
+      {
+        "type": "button",
+        "style": "secondary",
+        "action": {
+          "type": "message",
+          "label": "💬 สอบถามข้อมูลเพิ่มเติม",
+          "text": "สอบถาม"
+        },
+        "height": "sm"
+      }
+    ],
+    "paddingAll": "15px"
+  }
+}
