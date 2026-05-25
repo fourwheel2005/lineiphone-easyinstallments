@@ -55,20 +55,6 @@ public class EasyInstallmentFlowService implements ServiceFlowHandler {
         String msg = userMessage.trim();
         String userId = userState.getLineUserId();
 
-        // 🚨 ทางออกฉุกเฉิน (ดักคำเรียกแอดมิน และ คำหงุดหงิด)
-        boolean isPanic = msg.contains("แอดมิน") || msg.contains("คุยกับคน") ||
-                msg.contains("อ่านดีๆ") || msg.contains("บอกไปแล้ว") ||
-                msg.contains("บอท") || msg.contains("ไม่รู้เรื่อง") ||
-                msg.contains("อะไรเนี่ย");
-
-        if (isPanic) {
-            userState.setPreviousState(state);
-            userState.setCurrentState("ADMIN_MODE");
-            userStateRepository.save(userState);
-            lineMessageService.sendEmergencyCard(ADMIN_GROUP_ID, getServiceName(), getCustomerName(userId), "ลูกค้าระบุต้องการคุยกับคน หรือ เกิดความหงุดหงิดบอท");
-            return "รับทราบครับ แอดมินขออภัยในความไม่สะดวกนะครับ 🙏 เดี๋ยวแอดมินตัวจริงรีบเข้ามาดูแลเคสนี้ให้ทันที รบกวนรอสักครู่นะครับ ⏳";
-        }
-
         switch (state) {
 
             // ══════════════════════════════════════════════════════════
@@ -218,7 +204,7 @@ public class EasyInstallmentFlowService implements ServiceFlowHandler {
                     lineMessageService.sendEmergencyCard(ADMIN_GROUP_ID, "ไอโฟนผ่อนง่าย", getCustomerName(userId),
                             "ค้นหาราคาไม่เจอ: " + savedModel + " " + savedCapacity + " (" + savedCondition + ")");
                     return "สำหรับรุ่น **" + savedModel + " " + savedCapacity + " (" + savedCondition + ")** ตอนนี้โปรโมชั่นอาจมีการเปลี่ยนแปลง\n\n" +
-                            "เดี๋ยวแอดมินตัวจริงรีบเช็คสต๊อกและราคาพิเศษให้นะครับ รบกวนรอสักครู่ครับ ⏳";
+                            "เดี๋ยวแอดมินรีบเช็คสต๊อกและราคาพิเศษให้นะครับ รบกวนรอสักครู่ครับ ⏳";
                 }
 
                 PromotionPrice price = priceOpt.get();

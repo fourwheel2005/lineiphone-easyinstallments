@@ -3,6 +3,8 @@ package com.example.lineiphone_easyinstallments.service.line;
 import com.example.lineiphone_easyinstallments.entity.UserState;
 import com.example.lineiphone_easyinstallments.repository.UserStateRepository;
 import com.example.lineiphone_easyinstallments.service.ai.AiChatService;
+import com.example.lineiphone_easyinstallments.service.flow.FlowRetryManager;
+import com.example.lineiphone_easyinstallments.service.flow.LineMessageService;
 import com.example.lineiphone_easyinstallments.service.flow.ServiceFlowHandler;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -21,6 +23,8 @@ public class ChatFlowManager {
 
     // 🌟 ดึงสมอง AI เข้ามาเสียบเป็นด่านสุดท้าย
     private final AiChatService aiChatService;
+    private final FlowRetryManager flowRetryManager;
+    private final LineMessageService lineMessageService;
 
     @Transactional
     public String handleTextMessage(String lineUserId, String userMessage) {
@@ -44,6 +48,31 @@ public class ChatFlowManager {
             userState.setCurrentState("ADMIN_MODE");
             userStateRepository.save(userState);
             return null; // บอทเงียบ
+        }
+
+        // 🚨 Centralized Panic Word Check
+        boolean isPanic = msg.contains("แอดมิน") || msg.contains("ติดต่อแอดมิน") || msg.contains("คุยกับคน") ||
+                msg.contains("อ่านดีๆ") || msg.contains("บอกไปแล้ว") || msg.contains("บอท") ||
+                msg.contains("ไม่รู้เรื่อง") || msg.contains("อะไรเนี่ย");
+
+        if (isPanic) {
+            userState.setPreviousState(userState.getCurrentState());
+            userState.setCurrentState("ADMIN_MODE");
+            userStateRepository.save(userState);
+
+            String customerName = flowRetryManager.getCustomerName(lineUserId);
+            String serviceName = userState.getSelectedService() != null ? userState.getSelectedService() : "สอบถามทั่วไป";
+            String groupId = flowRetryManager.resolveGroupId(serviceName);
+
+            lineMessageService.sendEmergencyCard(
+                    groupId,
+                    serviceName,
+                    "general", // template fallback
+                    customerName,
+                    lineUserId,
+                    "ลูกค้าหงุดหงิดบอท / ต้องการคุยกับคน"
+            );
+            return "รับทราบครับ แอดมินขออภัยในความไม่สะดวกนะครับ 🙏 เดี๋ยวให้แอดมินรีบเข้ามาดูแลเคสนี้ให้ทันที รบกวนรอสักครู่นะครับ ⏳";
         }
 
         // ลูกค้ากดรีเซ็ต / เริ่มใหม่

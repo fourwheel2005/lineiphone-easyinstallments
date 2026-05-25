@@ -21,6 +21,7 @@ public class BalloonFlowService implements ServiceFlowHandler {
     private final MessagingApiClient messagingApiClient;
     private final AiDataExtractorService aiDataExtractorService;
     private final AiScreeningService aiScreeningService;
+    private final FlowRetryManager flowRetryManager;
 
     // 🔴 ใช้ Group ID ของโปรเจกต์ easyinstallments
     private final String ADMIN_GROUP_ID = "C75eb19ed18cf5a67a1461f785f581e78";
@@ -41,16 +42,6 @@ public class BalloonFlowService implements ServiceFlowHandler {
         String msg = userMessage.trim();
         String userId = userState.getLineUserId();
         String lastMessage = userState.getLastUserMessage();
-
-        boolean isPanic = msg.matches(".*(แอดมิน|คุยกับคน|อ่านดีๆ|บอกไปแล้ว|บอท|ไม่รู้เรื่อง|อะไรเนี่ย).*");
-        if (isPanic) {
-            userState.setPreviousState(state); // จำสเต็ปเดิม
-            userState.setCurrentState("ADMIN_MODE");
-            userState.setLastUserMessage(msg);
-            userStateRepository.save(userState);
-            lineMessageService.sendEmergencyCard(ADMIN_GROUP_ID, getServiceName(), "balloon", getCustomerName(userId), userId, "ลูกค้าต้องการคุยกับคน/หงุดหงิดบอท");
-            return "รับทราบครับ แอดมินขออภัยในความไม่สะดวกนะครับ 🙏 เดี๋ยวแอดมินตัวจริงรีบเข้ามาดูแลเคสนี้ให้ทันที รบกวนรอสักครู่นะครับ ⏳";
-        }
 
         String responseMessage = null;
 
@@ -291,7 +282,8 @@ public class BalloonFlowService implements ServiceFlowHandler {
                 break;
 
             case "STEP_6_MONTH_SELECTION":
-                boolean isValidMonth = msg.matches(".*(6|8|10|12|หก|แปด|สิบ).*");
+                boolean isValidMonth = msg.contains("6") || msg.contains("8") || msg.contains("10") || msg.contains("12") ||
+                                       msg.contains("หก") || msg.contains("แปด") || msg.contains("สิบ");
                 if (!isValidMonth) {
                     responseMessage = handleRetryLogic(userState, userId, msg, "ลูกค้าเลือกระยะเวลาผ่อนผิด", "ลูกค้าสะดวกส่งงวดละกี่เดือนดีครับ? 😊\nมีให้เลือก: **6, 8, 10 หรือ 12 เดือน** ครับ");
                     break;
@@ -334,29 +326,7 @@ public class BalloonFlowService implements ServiceFlowHandler {
     // 🛠️ Helper Method: ระบบจัดการคนพิมพ์มั่ว (Retry Logic)
     // ==========================================
     private String handleRetryLogic(UserState userState, String userId, String msg, String adminAlertReason, String retryPrompt) {
-        int currentRetry = userState.getRetryCount() != null ? userState.getRetryCount() : 0;
-        currentRetry++;
-
-        if (currentRetry >= 2) {
-            userState.setPreviousState(userState.getCurrentState()); // จำสเต็ปเดิม
-            userState.setCurrentState("ADMIN_MODE");
-            userState.setRetryCount(0);
-            userStateRepository.save(userState);
-
-            lineMessageService.sendEmergencyCard(
-                    ADMIN_GROUP_ID,
-                    getServiceName(),
-                    "balloon",
-                    getCustomerName(userId),
-                    userId,
-                    adminAlertReason + " เกิน 2 ครั้ง (ข้อความล่าสุด: " + msg + ")"
-            );
-
-            return "ดูเหมือนจะยังไม่เข้าใจข้อมูลส่วนนี้ 😅 เพื่อความรวดเร็ว ขอตามแอดมินตัวจริงมาช่วยดูแลเคสนี้ให้นะครับ รบกวนรอสักครู่ครับ ⏳";
-        }
-
-        userState.setRetryCount(currentRetry);
-        return retryPrompt;
+        return flowRetryManager.handleRetryLogic(userState, userId, msg, getServiceName(), adminAlertReason, retryPrompt);
     }
 
     private String getCustomerName(String userId) {

@@ -20,7 +20,9 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 @Slf4j
 @RequiredArgsConstructor
@@ -34,6 +36,7 @@ public class LineWebhookController {
 
 
     private final ConcurrentHashMap<String, Instant> lastImageReceivedTime = new ConcurrentHashMap<>();
+    private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(10);
 
     // ==========================================
     // 🟢 รวมฟังก์ชันรับข้อความและรูปภาพไว้ในที่เดียว (รองรับ SDK 8.4.0)
@@ -64,6 +67,18 @@ public class LineWebhookController {
         // ==========================================
         if (event.message() instanceof TextMessageContent textMessageContent) {
             String userMessage = textMessageContent.text().trim();
+            
+            // 🛡️ Input Validation: เช็คข้อความว่างและข้อความยาวเกินไป
+            if (userMessage.isEmpty()) {
+                return;
+            }
+            if (userMessage.length() > 500) {
+                messagingApiClient.replyMessage(new ReplyMessageRequest(
+                        replyToken, List.of(new TextMessage("ข้อความยาวเกินไปครับ แอดมินอ่านไม่ทัน 😅 รบกวนพิมพ์สั้นๆ หรือสรุปมาให้นะครับ")), false
+                ));
+                return;
+            }
+            
             log.info("📩 ได้รับข้อความจากลูกค้า [{}]: {}", lineUserId, userMessage);
 
             // ดึงหรือสร้าง UserState
@@ -75,31 +90,6 @@ public class LineWebhookController {
                     });
 
             String msg = userMessage.toLowerCase();
-
-            boolean isPanic = msg.contains("แอดมิน") || msg.contains("ติดต่อแอดมิน") || msg.contains("คุยกับคน") ||
-                    msg.contains("อ่านดีๆ") || msg.contains("บอท") || msg.contains("บอกไปแล้ว") ||
-                    msg.contains("ไม่รู้เรื่อง") || msg.contains("อะไรเนี่ย");
-
-            if (isPanic) {
-                userState.setCurrentState("ADMIN_MODE");
-                userStateRepository.save(userState);
-
-                String customerName = "ลูกค้า (ไม่ทราบชื่อ)";
-                try {
-                    var profile = messagingApiClient.getProfile(lineUserId).get();
-                    customerName = profile.body().displayName();
-                } catch (Exception e) {
-                    log.warn("❌ ไม่สามารถดึงชื่อลูกค้าได้");
-                }
-
-                String MAIN_ADMIN_GROUP_ID = "C9a256ba28c79d51b09c6a07f51471b25";
-                lineMessageService.sendEmergencyCard(MAIN_ADMIN_GROUP_ID, "สอบถามทั่วไป", customerName, "ลูกค้าต้องการคุยกับแอดมิน");
-
-                messagingApiClient.replyMessage(new ReplyMessageRequest(
-                        replyToken, List.of(new TextMessage("รับทราบครับ รบกวนรอแอดมินเข้ามาดูแลสักครู่นะครับ ⏳")), false
-                ));
-                return; // จบการทำงาน ไม่ส่งเข้า Flow
-            }
 
             // 🧠 ส่งเข้า Flow ปกติ
             try {
@@ -127,10 +117,8 @@ public class LineWebhookController {
             lastImageReceivedTime.put(lineUserId, Instant.now());
             log.info("📸 ได้รับรูปภาพจาก userId: {} -> เริ่มจับเวลา 3 วินาที", lineUserId);
 
-            new Thread(() -> {
+            scheduler.schedule(() -> {
                 try {
-                    Thread.sleep(3000); // รอ 3 วินาทีเผื่อส่งหลายรูป
-
                     Instant lastTime = lastImageReceivedTime.get(lineUserId);
                     if (lastTime != null && Instant.now().minusMillis(2500).isAfter(lastTime)) {
                         lastImageReceivedTime.remove(lineUserId);
@@ -146,10 +134,10 @@ public class LineWebhookController {
                             ));
                         }
                     }
-                } catch (InterruptedException e) {
+                } catch (Exception e) {
                     log.error("Error during image wait", e);
                 }
-            }).start();
+            }, 3000, TimeUnit.MILLISECONDS);
         }
     }
 
@@ -295,7 +283,7 @@ public class LineWebhookController {
             } else if (action.equals("take_case")) {
                 // 👇 เพิ่มชื่อลูกค้าตรงนี้
                 adminReplyMessage = "💬 รับเรื่องแล้ว! (ปิดบอทชั่วคราว) คุยกับลูกค้า (" + customerName + ") ต่อใน LINE OA ได้เลยครับ";
-                messageToCustomer = "แอดมินตัวจริงมารับเรื่องแล้วครับ! พิมพ์สอบถามได้เลยครับ 👇";
+                messageToCustomer = "แอดมินรับเรื่องแล้วครับ! พิมพ์สอบถามเพิ่มเติมได้เลยครับ 👇";
 
                 state.setCurrentState("ADMIN_MODE");
                 userStateRepository.save(state);

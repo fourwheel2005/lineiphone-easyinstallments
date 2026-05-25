@@ -41,20 +41,6 @@ public class TradeInFlowService implements ServiceFlowHandler {
         String msg = userMessage.trim();
         String userId = userState.getLineUserId();
 
-        // 🚨 ทางออกฉุกเฉิน
-        boolean isPanic = msg.contains("แอดมิน") || msg.contains("คุยกับคน") ||
-                msg.contains("อ่านดีๆ") || msg.contains("บอกไปแล้ว") ||
-                msg.contains("บอท") || msg.contains("ไม่รู้เรื่อง");
-
-        if (isPanic) {
-            userState.setPreviousState(state);
-            userState.setCurrentState("ADMIN_MODE");
-            userStateRepository.save(userState);
-
-            lineMessageService.sendEmergencyCard(ADMIN_GROUP_ID, getServiceName(), getCustomerName(userId), "ลูกค้าต้องการคุยกับคน หรือเกิดความหงุดหงิดบอท");
-            return "รับทราบครับ แอดมินขออภัยในความไม่สะดวกนะครับ 🙏 เดี๋ยวแอดมินตัวจริงรีบเข้ามาดูแลเคสนี้ให้ทันที รบกวนรอสักครู่นะครับ ⏳";
-        }
-
         switch (state) {
 
             // ══════════════════════════════════════════════════════════
