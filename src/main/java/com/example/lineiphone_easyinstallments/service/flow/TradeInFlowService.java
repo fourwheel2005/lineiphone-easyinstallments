@@ -24,6 +24,7 @@ public class TradeInFlowService implements ServiceFlowHandler {
 
     private final String ADMIN_GROUP_ID = "Cef2ceeeb8154fbd5dd92d294d467ecd4";
     private final String EXAMPLE_SETTINGS_IMG_URL = "https://raw.githubusercontent.com/fourwheel2005/image/main/S__8298515.jpg";
+    private final String EXAMPLE_BATTERY_IMG_URL = "https://raw.githubusercontent.com/fourwheel2005/image/main/วิธีเช็คสุขภาพแบตเตอรี่.png"; // TODO: ใส่ลิ้งก์รูปภาพตัวอย่างการเช็คแบตเตอรี่ที่นี่
 
     @Override
     public boolean supports(String serviceName) {
@@ -78,6 +79,11 @@ public class TradeInFlowService implements ServiceFlowHandler {
 
                 userState.setCurrentState("STEP_4_REPAIR");
                 userStateRepository.save(userState);
+
+                // 1. ส่งรูปภาพตัวอย่างการเช็คสุขภาพแบตเตอรี่
+                lineMessageService.sendImage(userId, EXAMPLE_BATTERY_IMG_URL);
+
+                // 2. ส่งข้อความถามสุขภาพแบตเตอรี่
                 return "โอเคครับ รับทราบข้อมูลอุปกรณ์ครับ 📦\n\n" +
                         "👉 ถัดไปรบกวนเช็ค **สุขภาพแบตเตอรี่ (Battery Health)** ให้แอดมินหน่อยครับว่าตอนนี้เหลือกี่เปอร์เซ็นต์? 🔋";
 

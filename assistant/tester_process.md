@@ -28,3 +28,5 @@
 - [2026-05-25 22:39:00] - [Review System UX/Infinite Loop] - [วิเคราะห์ช่องโหว่การติดลูป และแนะนำให้สร้าง FlowRetryManager พร้อมตรวจสอบกรณีลูกค้ายังไม่ได้กดแผนกใดๆ]
 - [2026-05-25 22:42:00] - [Review Response Phrasing] - [ตรวจสอบคำว่า "แอดมินตัวจริง" ทั่วทั้งระบบ และสั่งให้ Coder ลบออกเพื่อป้องกันลูกค้ารู้สึกถึงความไม่เป็นมืออาชีพ (Scammer-like phrasing)]
 - [2026-05-25 22:48:00] - [Review Prompts for Accuracy/Naturalness] - [ตรวจสอบ Prompt พบ Critical Bug กรณีตีความหมาย 'อายุ' ทับซ้อนกับ 'รุ่นโทรศัพท์' จึงสั่งให้ Coder เพิ่ม Context-Awareness เพื่อแก้ไขบัค พร้อมเพิ่มเงื่อนไขแสลงภาษาไทย]
+- [2026-05-26 21:35:00] - [Review Battery Check Step] - [ตรวจสอบขั้นตอนการถามสุขภาพแบตเตอรี่ในระบบรับซื้อ (TradeInFlowService) และแจ้ง Coder ให้เพิ่มโค้ดส่งรูปภาพตัวอย่างก่อนส่งข้อความคำถาม เพื่อให้ User Experience ดีขึ้น]
+- [2026-05-26 21:55:00] - [Review Screening Context Issue] - [ตรวจสอบปัญหาบอทไม่เข้าใจคำว่า "ปกติ" ในขั้นตอนถามเรื่อง iCloud จึงให้ Coder เพิ่มเงื่อนไข Context-Awareness ลงใน Prompt ของ AiScreeningService]

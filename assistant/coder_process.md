@@ -24,3 +24,5 @@
 - [2026-05-25 22:39:00] - [FlowRetryManager.java / ChatFlowManager.java] - [สร้าง FlowRetryManager รวมศูนย์จัดการ Retry, ย้ายระบบดักจับคำว่าแอดมินมาไว้ที่ ChatFlowManager และเชื่อม Group ID ตามแผนก]
 - [2026-05-25 22:42:00] - [All Flow Services & Controllers] - [ลบคำว่า "แอดมินตัวจริง" ออกจากข้อความตอบกลับของบอททั้งหมด เพื่อให้ภาษาดูเป็นธรรมชาติและไม่เหมือนมิจฉาชีพ]
 - [2026-05-25 22:48:00] - [Prompt Engineering] - [ปรับปรุง Prompt 3 ตัว: แก้ Age Bug โดยเพิ่ม Context-Awareness ใน Extractor, เพิ่มแสลงใน Screening, และปรับ Tone of Voice ใน Base ให้เป็นธรรมชาติขึ้น]
+- [2026-05-26 21:35:00] - [TradeInFlowService.java] - [เพิ่มการส่งรูปภาพตัวอย่างการเช็คแบตเตอรี่ในขั้นตอนถามสุขภาพแบตเตอรี่ (STEP_3_BATTERY) พร้อมกำหนดตัวแปร EXAMPLE_BATTERY_IMG_URL รอใส่ลิ้งก์จริง]
+- [2026-05-26 21:55:00] - [Prompt Engineering] - [เพิ่มเงื่อนไขใน screening-prompt.st หากถามเรื่องติดผ่อน/iCloud แล้วตอบ "ปกติ" ให้แปลว่า "NO" เพื่อแก้ปัญหาบอทไม่เข้าใจบริบท]
